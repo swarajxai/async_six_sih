@@ -38,6 +38,7 @@ export default function SuccessPage() {
 
   function onRunAgain() {
     resetDemo();
+    navigate('/dashboard');
   }
 
   return (

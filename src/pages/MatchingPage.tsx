@@ -15,7 +15,7 @@ const STEPS: { label: string; sub: string; icon: typeof CheckCircle2 }[] = [
 ];
 
 export default function MatchingPage() {
-  const { donors, openDonorModal, finishAlerting } = useDemo();
+  const { donors, openDonorModal, startAlerting } = useDemo();
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const [showResults, setShowResults] = useState(false);
@@ -52,7 +52,7 @@ export default function MatchingPage() {
   const visible = useMemo(() => ranked.slice(0, 5), [ranked]);
 
   function onAlert() {
-    finishAlerting();
+    startAlerting();
     navigate('/alerting');
   }
 

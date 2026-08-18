@@ -2,11 +2,13 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
   type ReactNode,
 } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   BLOOD_BANKS,
   HOSPITAL,
@@ -57,6 +59,7 @@ interface DemoActions {
   loginAs: (role: UserRole) => void;
   logout: () => void;
   goTo: (stage: Stage) => void;
+  raiseRequest: () => void;
   startMatching: () => void;
   startAlerting: () => void;
   finishAlerting: () => void;
@@ -90,6 +93,7 @@ function buildInitialRequest(): EmergencyRequest {
 }
 
 export function DemoProvider({ children }: { children: ReactNode }) {
+  const location = useLocation();
   const [stage, setStage] = useState<Stage>('login');
   const [role, setRole] = useState<UserRole>('hospital');
   const [activeRequest, setActiveRequest] = useState<EmergencyRequest | null>(null);
@@ -108,18 +112,36 @@ export function DemoProvider({ children }: { children: ReactNode }) {
     [role]
   );
 
-  // Refs to avoid stale closures inside timers
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const alertTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const backupTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const clearTimer = useCallback(() => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
+  const clearAlertTimers = useCallback(() => {
+    alertTimeoutsRef.current.forEach((timeout) => clearTimeout(timeout));
+    alertTimeoutsRef.current = [];
+  }, []);
+
+  const clearBackupTimer = useCallback(() => {
+    if (backupTimeoutRef.current) {
+      clearTimeout(backupTimeoutRef.current);
+      backupTimeoutRef.current = null;
     }
   }, []);
 
-  const loginAs = useCallback((next: UserRole) => {
-    setRole(next);
+  const clearPendingTimers = useCallback(() => {
+    clearAlertTimers();
+    clearBackupTimer();
+  }, [clearAlertTimers, clearBackupTimer]);
+
+  useEffect(() => {
+    if (location.pathname !== '/alerting') clearAlertTimers();
+    if (location.pathname !== '/coordination') clearBackupTimer();
+  }, [location.pathname, clearAlertTimers, clearBackupTimer]);
+
+  useEffect(() => {
+    return clearPendingTimers;
+  }, [clearPendingTimers]);
+
+  const resetEmergencyState = useCallback(() => {
     setActiveRequest(null);
     setDonors(buildFreshDonors());
     setPrimaryDonorId(null);
@@ -129,28 +151,34 @@ export function DemoProvider({ children }: { children: ReactNode }) {
     setCoordinationElapsedMs(0);
     setEtaSeconds(0);
     setAlertProgress({ sent: 0, total: 0, lockedAt: null });
-    setStage(next === 'hospital' ? 'dashboard' : 'dashboard');
+    setDonorModalDonorId(null);
   }, []);
 
+  const loginAs = useCallback((next: UserRole) => {
+    clearPendingTimers();
+    setRole(next);
+    resetEmergencyState();
+    setStage('dashboard');
+  }, [clearPendingTimers, resetEmergencyState]);
+
   const logout = useCallback(() => {
-    clearTimer();
+    clearPendingTimers();
     setStage('login');
-    setActiveRequest(null);
-    setDonors(buildFreshDonors());
-    setPrimaryDonorId(null);
-    setBackupDonorId(null);
-    setScreeningFailed(false);
-    setCoordinationStartTime(null);
-    setCoordinationElapsedMs(0);
-    setEtaSeconds(0);
-    setAlertProgress({ sent: 0, total: 0, lockedAt: null });
-  }, [clearTimer]);
+    resetEmergencyState();
+  }, [clearPendingTimers, resetEmergencyState]);
 
   const goTo = useCallback((next: Stage) => setStage(next), []);
 
+  const raiseRequest = useCallback(() => {
+    clearPendingTimers();
+    resetEmergencyState();
+    setActiveRequest(buildInitialRequest());
+    setStage('request');
+  }, [clearPendingTimers, resetEmergencyState]);
+
   const startMatching = useCallback(() => {
-    const req = buildInitialRequest();
-    setActiveRequest({ ...req, status: 'matching' });
+    clearPendingTimers();
+    setActiveRequest((prev) => ({ ...(prev ?? buildInitialRequest()), status: 'matching' }));
     setDonors(buildFreshDonors());
     setPrimaryDonorId(null);
     setBackupDonorId(null);
@@ -160,10 +188,11 @@ export function DemoProvider({ children }: { children: ReactNode }) {
     setEtaSeconds(0);
     setAlertProgress({ sent: 0, total: 0, lockedAt: null });
     setStage('matching');
-  }, []);
+  }, [clearPendingTimers]);
 
   const startAlerting = useCallback(() => {
     if (!activeRequest) return;
+    clearAlertTimers();
     setActiveRequest({ ...activeRequest, status: 'alerting' });
     // Mark all donors as alert-sent; a few will flip to viewing/confirmed/unavailable
     setDonors((prev) => prev.map((d) => ({ ...d, status: 'alert-sent' as const })));
@@ -204,24 +233,21 @@ export function DemoProvider({ children }: { children: ReactNode }) {
         })
       );
       setPrimaryDonorId(DEFAULT_PRIMARY_ID);
+      setActiveRequest((prev) => (prev ? { ...prev, status: 'secured' } : prev));
       setAlertProgress((p) => ({ ...p, lockedAt: Date.now() }));
     }, 2400);
 
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      clearTimeout(t3);
-      clearTimeout(t4);
-    };
-  }, [activeRequest]);
+    alertTimeoutsRef.current = [t1, t2, t3, t4];
+  }, [activeRequest, clearAlertTimers]);
 
   const finishAlerting = useCallback(() => {
     if (!activeRequest) return;
+    clearAlertTimers();
     setActiveRequest({ ...activeRequest, status: 'coordination' });
     setCoordinationStartTime(Date.now());
     setEtaSeconds(12 * 60);
     setStage('coordination');
-  }, [activeRequest]);
+  }, [activeRequest, clearAlertTimers]);
 
   const setDonorStatus = useCallback((id: string, status: Donor['status']) => {
     setDonors((prev) => prev.map((d) => (d.id === id ? { ...d, status } : d)));
@@ -248,19 +274,21 @@ export function DemoProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const simulateScreeningFailure = useCallback(() => {
+    clearBackupTimer();
     setScreeningFailed(true);
     // After a short delay, activate Priya Sharma as backup.
-    setTimeout(() => {
+    backupTimeoutRef.current = setTimeout(() => {
+      backupTimeoutRef.current = null;
       activateBackupDonor(DEFAULT_BACKUP_ID);
     }, 1400);
-  }, [activateBackupDonor]);
+  }, [activateBackupDonor, clearBackupTimer]);
 
   const completeDonation = useCallback(() => {
-    clearTimer();
+    clearPendingTimers();
     if (!activeRequest) return;
     setActiveRequest({ ...activeRequest, status: 'success' });
     setStage('success');
-  }, [activeRequest, clearTimer]);
+  }, [activeRequest, clearPendingTimers]);
 
   const tickEta = useCallback(() => {
     setEtaSeconds((s) => (s > 0 ? s - 1 : 0));
@@ -274,19 +302,10 @@ export function DemoProvider({ children }: { children: ReactNode }) {
   const closeDonorModal = useCallback(() => setDonorModalDonorId(null), []);
 
   const resetDemo = useCallback(() => {
-    clearTimer();
-    setStage('dashboard');
-    setActiveRequest(null);
-    setDonors(buildFreshDonors());
-    setPrimaryDonorId(null);
-    setBackupDonorId(null);
-    setScreeningFailed(false);
-    setCoordinationStartTime(null);
-    setCoordinationElapsedMs(0);
-    setEtaSeconds(0);
-    setAlertProgress({ sent: 0, total: 0, lockedAt: null });
-    setDonorModalDonorId(null);
-  }, [clearTimer]);
+    clearPendingTimers();
+    resetEmergencyState();
+    setStage((current) => (current === 'login' ? 'login' : 'dashboard'));
+  }, [clearPendingTimers, resetEmergencyState]);
 
   const value: DemoState & DemoActions = {
     stage,
@@ -308,6 +327,7 @@ export function DemoProvider({ children }: { children: ReactNode }) {
     loginAs,
     logout,
     goTo,
+    raiseRequest,
     startMatching,
     startAlerting,
     finishAlerting,

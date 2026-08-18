@@ -24,7 +24,7 @@ export interface EmergencyRequest {
   urgency: Urgency;
   requiredWithinMinutes: number;
   raisedAt: number; // epoch ms
-  status: 'raised' | 'matching' | 'alerting' | 'coordination' | 'success';
+  status: 'raised' | 'matching' | 'alerting' | 'secured' | 'coordination' | 'success';
 }
 
 export type DonorStatus =

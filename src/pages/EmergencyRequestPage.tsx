@@ -7,12 +7,12 @@ import { useDemo } from '../context/DemoContext';
 import { HOSPITAL, INITIAL_REQUEST } from '../data/demoData';
 
 export default function EmergencyRequestPage() {
-  const { startAlerting } = useDemo();
+  const { startMatching } = useDemo();
   const navigate = useNavigate();
 
   function onStart() {
-    startAlerting();
-    navigate('/alerting');
+    startMatching();
+    navigate('/matching');
   }
 
   return (

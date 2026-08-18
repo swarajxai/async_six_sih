@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Building2, Droplet, HeartPulse, Stethoscope, ArrowRight } from 'lucide-react';
 import Brand from '../components/Brand';
+import EmergencyBadge from '../components/EmergencyBadge';
+import Modal from '../components/Modal';
 import PrimaryButton from '../components/PrimaryButton';
 import { useDemo } from '../context/DemoContext';
 import type { UserRole } from '../types';
@@ -16,12 +18,24 @@ export default function LoginPage() {
   const [role, setRole] = useState<UserRole>('hospital');
   const [hospitalId, setHospitalId] = useState('VSS-HOSP-001');
   const [password, setPassword] = useState('demo');
+  const [showRoleInfo, setShowRoleInfo] = useState(false);
   const { loginAs } = useDemo();
   const navigate = useNavigate();
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    loginAs(role);
+    if (role !== 'hospital') {
+      setShowRoleInfo(true);
+      return;
+    }
+    loginAs('hospital');
+    navigate('/dashboard');
+  }
+
+  function continueWithHospitalDemo() {
+    setRole('hospital');
+    setShowRoleInfo(false);
+    loginAs('hospital');
     navigate('/dashboard');
   }
 
@@ -107,6 +121,9 @@ export default function LoginPage() {
                     );
                   })}
                 </div>
+                <div className="mt-2">
+                  <EmergencyBadge tone="navy">Hospital · Recommended for SIH Demo</EmergencyBadge>
+                </div>
               </div>
 
               <div>
@@ -149,6 +166,22 @@ export default function LoginPage() {
           </div>
         </div>
       </div>
+
+      <Modal
+        open={showRoleInfo}
+        onClose={() => setShowRoleInfo(false)}
+        title={`${role === 'patient' ? 'Patient' : 'Blood Donor'} Interface`}
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600">
+            {role === 'patient' ? 'Patient' : 'Blood donor'} interface is part of the LIFE-LINK ecosystem.
+            The SIH prototype demonstrates the hospital emergency coordination workflow.
+          </p>
+          <PrimaryButton block onClick={continueWithHospitalDemo}>
+            Continue with Hospital Demo <ArrowRight size={16} />
+          </PrimaryButton>
+        </div>
+      </Modal>
     </div>
   );
 }

@@ -25,11 +25,11 @@ function timeAgo(ms: number): string {
 }
 
 export default function DashboardPage() {
-  const { metrics, recentRequests, user, startMatching } = useDemo();
+  const { metrics, recentRequests, user, raiseRequest } = useDemo();
   const navigate = useNavigate();
 
   function onRaise() {
-    startMatching();
+    raiseRequest();
     navigate('/request');
   }
 

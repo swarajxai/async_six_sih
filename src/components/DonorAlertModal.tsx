@@ -6,7 +6,7 @@ import PrimaryButton from './PrimaryButton';
 import SecondaryButton from './SecondaryButton';
 
 export default function DonorAlertModal() {
-  const { donors, donorModalDonorId, closeDonorModal, setDonorStatus, openDonorModal } = useDemo();
+  const { donors, donorModalDonorId, closeDonorModal, openDonorModal } = useDemo();
   const donor = donors.find((d) => d.id === donorModalDonorId) ?? null;
 
   return (
@@ -30,21 +30,15 @@ export default function DonorAlertModal() {
             </div>
           </div>
 
+          <div className="text-[11px] text-slate-500 text-center">
+            Preview only · Donor responses are simulated automatically during the judge demo.
+          </div>
+
           <div className="grid grid-cols-2 gap-2">
-            <PrimaryButton
-              onClick={() => {
-                setDonorStatus(donor.id, 'confirmed');
-                closeDonorModal();
-              }}
-            >
+            <PrimaryButton onClick={closeDonorModal}>
               <Check size={16} /> ACCEPT
             </PrimaryButton>
-            <SecondaryButton
-              onClick={() => {
-                setDonorStatus(donor.id, 'unavailable');
-                closeDonorModal();
-              }}
-            >
+            <SecondaryButton onClick={closeDonorModal}>
               <XCircle size={16} /> UNAVAILABLE
             </SecondaryButton>
           </div>
