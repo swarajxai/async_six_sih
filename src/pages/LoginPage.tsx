@@ -1,14 +1,17 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Building2, Droplet, Stethoscope } from 'lucide-react';
+import { ArrowRight, Building2, Droplet, Phone, Stethoscope } from 'lucide-react';
 import Brand from '../components/Brand';
+import DonorForgotPasswordModal from '../components/DonorForgotPasswordModal';
+import DonorRegistrationModal from '../components/DonorRegistrationModal';
 import EmergencyBadge from '../components/EmergencyBadge';
 import ForgotPasswordModal from '../components/ForgotPasswordModal';
 import HospitalRegistrationModal from '../components/HospitalRegistrationModal';
-import Modal from '../components/Modal';
 import PrimaryButton from '../components/PrimaryButton';
 import SecondaryButton from '../components/SecondaryButton';
 import { useDemo } from '../context/DemoContext';
+import { useDonor } from '../context/DonorContext';
+import { DONOR_DEMO_CREDENTIALS } from '../data/donorData';
 import type { UserRole } from '../types';
 
 const ROLE_OPTIONS: { value: UserRole; label: string; description: string; icon: typeof Building2 }[] = [
@@ -20,18 +23,30 @@ export default function LoginPage() {
   const [role, setRole] = useState<UserRole>('hospital');
   const [hospitalId, setHospitalId] = useState('VSS-HOSP-001');
   const [password, setPassword] = useState('demo');
-  const [showDonorInfo, setShowDonorInfo] = useState(false);
+  const [donorPhone, setDonorPhone] = useState(DONOR_DEMO_CREDENTIALS.phone);
+  const [donorPassword, setDonorPassword] = useState(DONOR_DEMO_CREDENTIALS.password);
+  const [donorError, setDonorError] = useState('');
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [showRegistration, setShowRegistration] = useState(false);
-  const { loginAs } = useDemo();
+  const [showDonorForgotPassword, setShowDonorForgotPassword] = useState(false);
+  const [showDonorRegistration, setShowDonorRegistration] = useState(false);
+  const { loginAs, logout: logoutHospital } = useDemo();
+  const { loginDonor, logoutDonor } = useDonor();
   const navigate = useNavigate();
 
   function onSubmit(event: React.FormEvent) {
     event.preventDefault();
     if (role === 'donor') {
-      setShowDonorInfo(true);
+      if (!loginDonor(donorPhone, donorPassword)) {
+        setDonorError('Use the demo donor credentials shown below.');
+        return;
+      }
+      setDonorError('');
+      logoutHospital();
+      navigate('/donor/eligibility');
       return;
     }
+    logoutDonor();
     loginAs('hospital');
     navigate('/dashboard');
   }
@@ -84,7 +99,7 @@ export default function LoginPage() {
                       <button
                         type="button"
                         key={option.value}
-                        onClick={() => setRole(option.value)}
+                        onClick={() => { setRole(option.value); setDonorError(''); }}
                         className={[
                           'flex flex-col items-center justify-center gap-1 rounded-xl px-2 py-3 text-xs font-semibold ring-1 transition',
                           active ? 'bg-navy-900 text-white ring-navy-900 shadow-pop' : 'bg-white text-navy-800 ring-slate-200 hover:bg-slate-50',
@@ -97,7 +112,7 @@ export default function LoginPage() {
                     );
                   })}
                 </div>
-                <div className="mt-2"><EmergencyBadge tone="navy">Hospital · Recommended for SIH Demo</EmergencyBadge></div>
+                {role === 'hospital' && <div className="mt-2"><EmergencyBadge tone="navy">Hospital · Recommended for SIH Demo</EmergencyBadge></div>}
               </div>
 
               {role === 'hospital' ? (
@@ -135,10 +150,21 @@ export default function LoginPage() {
                 </>
               ) : (
                 <>
-                  <div className="rounded-xl bg-navy-50 ring-1 ring-navy-100 p-4 text-sm text-slate-600">
-                    The donor-side emergency response workflow is available through the Blood Donor Portal. Its full account experience arrives in Phase 2.
+                  <div>
+                    <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Phone Number</label>
+                    <div className="mt-1 relative">
+                      <Phone size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input value={donorPhone} inputMode="numeric" onChange={(event) => setDonorPhone(event.target.value.replace(/\D/g, '').slice(0, 10))} className="w-full h-11 pl-9 pr-3 rounded-xl ring-1 ring-slate-200 bg-white text-navy-900 text-sm focus:ring-2 focus:ring-navy-500 focus:outline-none" placeholder="9876543210" />
+                    </div>
                   </div>
-                  <PrimaryButton size="lg" block type="submit">Blood Donor Portal <ArrowRight size={16} /></PrimaryButton>
+                  <div>
+                    <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Password</label>
+                    <input value={donorPassword} type="password" onChange={(event) => setDonorPassword(event.target.value)} className="mt-1 w-full h-11 px-3 rounded-xl ring-1 ring-slate-200 bg-white text-navy-900 text-sm focus:ring-2 focus:ring-navy-500 focus:outline-none" />
+                    <div className="mt-1 flex items-center justify-between gap-2"><span className="text-[11px] text-slate-500">Demo: {DONOR_DEMO_CREDENTIALS.phone} / {DONOR_DEMO_CREDENTIALS.password}</span><button type="button" onClick={() => setShowDonorForgotPassword(true)} className="text-[11px] font-semibold text-navy-700 underline">Forgot Password?</button></div>
+                  </div>
+                  {donorError && <div className="text-xs text-red-600 font-medium">{donorError}</div>}
+                  <PrimaryButton size="lg" block type="submit">Login <ArrowRight size={16} /></PrimaryButton>
+                  <SecondaryButton block type="button" onClick={() => setShowDonorRegistration(true)}>Create Donor Account</SecondaryButton>
                 </>
               )}
 
@@ -154,13 +180,8 @@ export default function LoginPage() {
         onClose={() => setShowRegistration(false)}
         onCreated={(createdUserId) => { setHospitalId(createdUserId); setRole('hospital'); }}
       />
-      <Modal open={showDonorInfo} onClose={() => setShowDonorInfo(false)} title="Blood Donor Portal">
-        <div className="space-y-4">
-          <p className="text-sm text-slate-600">The donor-side emergency response workflow is available through the donor interface.</p>
-          <p className="text-xs text-slate-500">The complete Blood Donor login and dashboard will be connected in Phase 2.</p>
-          <SecondaryButton block onClick={() => { setShowDonorInfo(false); setRole('hospital'); }}>Return to Hospital Login</SecondaryButton>
-        </div>
-      </Modal>
+      <DonorForgotPasswordModal open={showDonorForgotPassword} onClose={() => setShowDonorForgotPassword(false)} onUpdated={(phone) => { setDonorPhone(phone); setRole('donor'); setDonorPassword(''); }} />
+      <DonorRegistrationModal open={showDonorRegistration} onClose={() => setShowDonorRegistration(false)} onCreated={(phone) => { setDonorPhone(phone); setDonorPassword(''); setRole('donor'); }} />
     </div>
   );
 }

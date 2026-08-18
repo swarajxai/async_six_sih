@@ -109,6 +109,72 @@ export interface DonorCoordination {
   isReplacement: boolean;
 }
 
+export type DonorGender = 'Male' | 'Female' | 'Other';
+export type DonorEligibilityResult = 'pending' | 'likely-eligible' | 'review-required';
+export type DonorEmergencyResponse = 'pending' | 'accepted' | 'unavailable';
+export type DonorJourneyStatus =
+  | 'idle'
+  | 'en-route'
+  | 'arrived'
+  | 'screening'
+  | 'screening-cleared'
+  | 'completed';
+export type DonorTravelMode = Donor['travelMode'];
+
+export interface DonorProfile {
+  donorId: string;
+  fullName: string;
+  bloodGroup: BloodGroup;
+  dateOfBirth: string;
+  gender: DonorGender;
+  phone: string;
+  email?: string;
+  address: string;
+  state: string;
+  district: string;
+  pinCode: string;
+  maskedIdentity: string;
+  identityStatus: 'Demo e-KYC Verified';
+  availableForEmergency: boolean;
+  nightEmergencyVolunteer: boolean;
+}
+
+export interface DonationHistoryItem {
+  id: string;
+  date: string;
+  facility: string;
+  bloodGroup: BloodGroup;
+  units: number;
+  status: 'Completed';
+  rewardPoints: number;
+}
+
+export interface RewardBadge {
+  id: string;
+  name: string;
+  description: string;
+  unlocked: boolean;
+  tone: 'navy' | 'red' | 'green' | 'amber';
+}
+
+export interface EligibilityQuestion {
+  id: string;
+  prompt: string;
+  safeDemoAnswer: boolean;
+}
+
+export interface DonorIncomingEmergency {
+  id: string;
+  hospitalName: string;
+  hospitalLocation: string;
+  bloodGroup: BloodGroup;
+  distanceKm: number;
+  urgency: Urgency;
+  requiredWithinMinutes: number;
+  verifiedHospital: boolean;
+  isNightEmergency: boolean;
+}
+
 export interface BloodBank {
   id: string;
   name: string;

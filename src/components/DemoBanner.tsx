@@ -1,12 +1,20 @@
 import { Sparkles, RotateCcw } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useDemo } from '../context/DemoContext';
+import { useDonor } from '../context/DonorContext';
 
 export default function DemoBanner() {
   const { stage, resetDemo } = useDemo();
+  const { isAuthenticated: donorAuthenticated, resetDonorDemo } = useDonor();
   const navigate = useNavigate();
+  const location = useLocation();
 
   function onReset() {
+    if (location.pathname.startsWith('/donor')) {
+      resetDonorDemo();
+      navigate(donorAuthenticated ? '/donor/dashboard' : '/login');
+      return;
+    }
     const destination = stage === 'login' ? '/login' : '/dashboard';
     resetDemo();
     navigate(destination);
