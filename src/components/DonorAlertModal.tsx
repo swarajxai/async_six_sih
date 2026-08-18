@@ -6,7 +6,7 @@ import PrimaryButton from './PrimaryButton';
 import SecondaryButton from './SecondaryButton';
 
 export default function DonorAlertModal() {
-  const { donors, donorModalDonorId, closeDonorModal, openDonorModal } = useDemo();
+  const { donors, activeRequest, donorModalDonorId, closeDonorModal, openDonorModal } = useDemo();
   const donor = donors.find((d) => d.id === donorModalDonorId) ?? null;
 
   return (
@@ -18,7 +18,7 @@ export default function DonorAlertModal() {
               <AlertTriangle size={16} /> EMERGENCY BLOOD REQUEST
             </div>
             <div className="mt-2 text-2xl font-extrabold text-navy-900">
-              {donor.bloodGroup} needed
+              {activeRequest?.bloodGroup ?? donor.bloodGroup} needed
             </div>
             <div className="mt-1 text-sm text-slate-700">VSS Medical College &amp; Hospital</div>
             <div className="mt-1 inline-flex items-center gap-1 text-xs text-slate-600">
@@ -26,7 +26,7 @@ export default function DonorAlertModal() {
             </div>
             <div className="mt-2 flex items-center gap-2">
               <EmergencyBadge tone="red" dot>Critical</EmergencyBadge>
-              <EmergencyBadge tone="navy">Within 60 min</EmergencyBadge>
+              <EmergencyBadge tone="navy">Within {activeRequest?.requiredWithinMinutes ?? 60} min</EmergencyBadge>
             </div>
           </div>
 

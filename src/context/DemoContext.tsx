@@ -10,24 +10,28 @@ import {
 } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
-  BLOOD_BANKS,
   HOSPITAL,
-  INITIAL_REQUEST,
+  INITIAL_REQUEST_DRAFT,
   METRICS,
   RANKED_DONORS,
   RECENT_REQUESTS,
 } from '../data/demoData';
+import { rankCompatibleRedCellDonors } from '../utils/bloodCompatibility';
 import type {
-  BloodBank,
+  BloodAvailabilityRecord,
+  BloodBankPlan,
   Donor,
+  DonorCoordination,
   EmergencyRequest,
+  EmergencyRequestDraft,
   Hospital,
   UserRole,
 } from '../types';
 
-type Stage =
+export type Stage =
   | 'login'
   | 'dashboard'
+  | 'blood-availability'
   | 'request'
   | 'matching'
   | 'alerting'
@@ -38,37 +42,43 @@ interface DemoState {
   stage: Stage;
   role: UserRole;
   user: { displayName: string; hospital: Hospital } | null;
+  requestDraft: EmergencyRequestDraft;
+  bloodBankPlan: BloodBankPlan | null;
   activeRequest: EmergencyRequest | null;
   donors: Donor[];
-  bloodBanks: BloodBank[];
-  metrics: typeof METRICS;
-  recentRequests: EmergencyRequest[];
-  // coordination
-  primaryDonorId: string | null;
-  backupDonorId: string | null;
-  screeningFailed: boolean;
+  matchedDonors: Donor[];
+  alertedDonorIds: string[];
+  confirmedDonorIds: string[];
+  standbyDonorIds: string[];
+  failedDonorIds: string[];
+  donorCoordination: Record<string, DonorCoordination>;
+  replacementCount: number;
+  replacementPending: boolean;
   coordinationStartTime: number | null;
   coordinationElapsedMs: number;
-  etaSeconds: number;
   alertProgress: { sent: number; total: number; lockedAt: number | null };
-  // ui
   donorModalDonorId: string | null;
+  metrics: typeof METRICS;
+  recentRequests: EmergencyRequest[];
 }
 
 interface DemoActions {
   loginAs: (role: UserRole) => void;
   logout: () => void;
   goTo: (stage: Stage) => void;
+  updateRequestDraft: (patch: Partial<EmergencyRequestDraft>) => void;
+  selectBloodBankPlan: (record: BloodAvailabilityRecord, units: number) => void;
+  confirmBloodBankPlan: () => void;
+  clearBloodBankPlan: () => void;
+  openBloodAvailability: () => void;
   raiseRequest: () => void;
   startMatching: () => void;
   startAlerting: () => void;
   finishAlerting: () => void;
-  setDonorStatus: (id: string, status: Donor['status']) => void;
-  lockPrimaryDonor: (id: string) => void;
-  activateBackupDonor: (id: string) => void;
   simulateScreeningFailure: () => void;
   completeDonation: () => void;
-  tickEta: () => void;
+  completeBloodBankCoverage: () => void;
+  tickDonorEtas: () => void;
   tickCoordination: () => void;
   openDonorModal: (id: string) => void;
   closeDonorModal: () => void;
@@ -77,18 +87,34 @@ interface DemoActions {
 
 const DemoContext = createContext<(DemoState & DemoActions) | null>(null);
 
-const DEFAULT_PRIMARY_ID = 'd-1'; // Rahul Das
-const DEFAULT_BACKUP_ID = 'd-2'; // Priya Sharma
-
 function buildFreshDonors(): Donor[] {
-  return RANKED_DONORS.map((d) => ({ ...d, status: 'idle' }));
+  return RANKED_DONORS.map((donor) => ({ ...donor, status: 'idle' }));
 }
 
-function buildInitialRequest(): EmergencyRequest {
+function getSecuredUnits(draft: EmergencyRequestDraft, plan: BloodBankPlan | null): number {
+  if (!plan || plan.status !== 'secured' || plan.bloodGroup !== draft.bloodGroup) return 0;
+  return Math.max(0, Math.min(draft.units, plan.unitsSecured));
+}
+
+function buildRequest(
+  draft: EmergencyRequestDraft,
+  plan: BloodBankPlan | null,
+  status: EmergencyRequest['status'] = 'raised',
+  raisedAt = Date.now(),
+): EmergencyRequest {
+  const units = Math.max(1, draft.units);
+  const bloodBankUnitsSecured = getSecuredUnits({ ...draft, units }, plan);
   return {
-    ...INITIAL_REQUEST,
-    raisedAt: Date.now(),
-    status: 'raised',
+    id: 'req-aarav-001',
+    ...draft,
+    units,
+    hospitalId: HOSPITAL.id,
+    hospitalName: HOSPITAL.name,
+    location: HOSPITAL.location,
+    bloodBankUnitsSecured,
+    donorUnitsRequired: Math.max(0, units - bloodBankUnitsSecured),
+    raisedAt,
+    status,
   };
 }
 
@@ -96,207 +122,336 @@ export function DemoProvider({ children }: { children: ReactNode }) {
   const location = useLocation();
   const [stage, setStage] = useState<Stage>('login');
   const [role, setRole] = useState<UserRole>('hospital');
+  const [requestDraft, setRequestDraft] = useState<EmergencyRequestDraft>({ ...INITIAL_REQUEST_DRAFT });
+  const [bloodBankPlan, setBloodBankPlan] = useState<BloodBankPlan | null>(null);
   const [activeRequest, setActiveRequest] = useState<EmergencyRequest | null>(null);
   const [donors, setDonors] = useState<Donor[]>(() => buildFreshDonors());
-  const [primaryDonorId, setPrimaryDonorId] = useState<string | null>(null);
-  const [backupDonorId, setBackupDonorId] = useState<string | null>(null);
-  const [screeningFailed, setScreeningFailed] = useState(false);
+  const [matchedDonors, setMatchedDonors] = useState<Donor[]>([]);
+  const [alertedDonorIds, setAlertedDonorIds] = useState<string[]>([]);
+  const [confirmedDonorIds, setConfirmedDonorIds] = useState<string[]>([]);
+  const [standbyDonorIds, setStandbyDonorIds] = useState<string[]>([]);
+  const [failedDonorIds, setFailedDonorIds] = useState<string[]>([]);
+  const [donorCoordination, setDonorCoordination] = useState<Record<string, DonorCoordination>>({});
+  const [replacementCount, setReplacementCount] = useState(0);
+  const [replacementPending, setReplacementPending] = useState(false);
   const [coordinationStartTime, setCoordinationStartTime] = useState<number | null>(null);
   const [coordinationElapsedMs, setCoordinationElapsedMs] = useState(0);
-  const [etaSeconds, setEtaSeconds] = useState<number>(0);
   const [alertProgress, setAlertProgress] = useState({ sent: 0, total: 0, lockedAt: null as number | null });
   const [donorModalDonorId, setDonorModalDonorId] = useState<string | null>(null);
-
-  const user = useMemo(
-    () => (role ? { displayName: HOSPITAL.name, hospital: HOSPITAL } : null),
-    [role]
-  );
+  const [recentRequests, setRecentRequests] = useState<EmergencyRequest[]>(RECENT_REQUESTS);
 
   const alertTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
-  const backupTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const replacementTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const coordinationElapsedRef = useRef(0);
+
+  const user = useMemo(
+    () => (role === 'hospital' ? { displayName: HOSPITAL.name, hospital: HOSPITAL } : null),
+    [role],
+  );
 
   const clearAlertTimers = useCallback(() => {
     alertTimeoutsRef.current.forEach((timeout) => clearTimeout(timeout));
     alertTimeoutsRef.current = [];
   }, []);
 
-  const clearBackupTimer = useCallback(() => {
-    if (backupTimeoutRef.current) {
-      clearTimeout(backupTimeoutRef.current);
-      backupTimeoutRef.current = null;
+  const clearReplacementTimer = useCallback(() => {
+    if (replacementTimeoutRef.current) {
+      clearTimeout(replacementTimeoutRef.current);
+      replacementTimeoutRef.current = null;
     }
   }, []);
 
   const clearPendingTimers = useCallback(() => {
     clearAlertTimers();
-    clearBackupTimer();
-  }, [clearAlertTimers, clearBackupTimer]);
+    clearReplacementTimer();
+  }, [clearAlertTimers, clearReplacementTimer]);
 
   useEffect(() => {
     if (location.pathname !== '/alerting') clearAlertTimers();
-    if (location.pathname !== '/coordination') clearBackupTimer();
-  }, [location.pathname, clearAlertTimers, clearBackupTimer]);
+    if (location.pathname !== '/coordination') clearReplacementTimer();
+  }, [location.pathname, clearAlertTimers, clearReplacementTimer]);
 
-  useEffect(() => {
-    return clearPendingTimers;
-  }, [clearPendingTimers]);
+  useEffect(() => clearPendingTimers, [clearPendingTimers]);
 
-  const resetEmergencyState = useCallback(() => {
-    setActiveRequest(null);
+  const resetDonorFlow = useCallback(() => {
     setDonors(buildFreshDonors());
-    setPrimaryDonorId(null);
-    setBackupDonorId(null);
-    setScreeningFailed(false);
+    setMatchedDonors([]);
+    setAlertedDonorIds([]);
+    setConfirmedDonorIds([]);
+    setStandbyDonorIds([]);
+    setFailedDonorIds([]);
+    setDonorCoordination({});
+    setReplacementCount(0);
+    setReplacementPending(false);
     setCoordinationStartTime(null);
+    coordinationElapsedRef.current = 0;
     setCoordinationElapsedMs(0);
-    setEtaSeconds(0);
     setAlertProgress({ sent: 0, total: 0, lockedAt: null });
     setDonorModalDonorId(null);
   }, []);
 
-  const loginAs = useCallback((next: UserRole) => {
+  const resetEmergencyState = useCallback(() => {
+    resetDonorFlow();
+    setRequestDraft({ ...INITIAL_REQUEST_DRAFT });
+    setBloodBankPlan(null);
+    setActiveRequest(null);
+  }, [resetDonorFlow]);
+
+  const loginAs = useCallback((nextRole: UserRole) => {
     clearPendingTimers();
-    setRole(next);
+    setRole(nextRole);
     resetEmergencyState();
-    setStage('dashboard');
+    setRecentRequests(RECENT_REQUESTS);
+    setStage(nextRole === 'hospital' ? 'dashboard' : 'login');
   }, [clearPendingTimers, resetEmergencyState]);
 
   const logout = useCallback(() => {
     clearPendingTimers();
-    setStage('login');
     resetEmergencyState();
+    setStage('login');
   }, [clearPendingTimers, resetEmergencyState]);
 
-  const goTo = useCallback((next: Stage) => setStage(next), []);
+  const goTo = useCallback((nextStage: Stage) => setStage(nextStage), []);
+
+  const updateRequestDraft = useCallback((patch: Partial<EmergencyRequestDraft>) => {
+    const nextDraft = {
+      ...requestDraft,
+      ...patch,
+      units: Math.max(1, Number(patch.units ?? requestDraft.units)),
+    };
+    const nextPlan = bloodBankPlan?.bloodGroup === nextDraft.bloodGroup
+      ? {
+          ...bloodBankPlan,
+          unitsPlanned: Math.min(nextDraft.units, bloodBankPlan.unitsPlanned),
+          unitsSecured: Math.min(nextDraft.units, bloodBankPlan.unitsSecured),
+        }
+      : null;
+    setRequestDraft(nextDraft);
+    setBloodBankPlan(nextPlan);
+    setActiveRequest((current) =>
+      current ? buildRequest(nextDraft, nextPlan, current.status, current.raisedAt) : current
+    );
+  }, [requestDraft, bloodBankPlan]);
+
+  const selectBloodBankPlan = useCallback((record: BloodAvailabilityRecord, units: number) => {
+    const unitsPlanned = Math.max(1, Math.min(record.unitsAvailable, requestDraft.units, units));
+    setBloodBankPlan({
+      recordId: record.id,
+      bloodBankId: record.bloodBankId,
+      bloodBankName: record.bloodBankName,
+      bloodGroup: record.bloodGroup,
+      component: record.component,
+      unitsPlanned,
+      unitsSecured: 0,
+      status: 'selected',
+    });
+  }, [requestDraft.units]);
+
+  const confirmBloodBankPlan = useCallback(() => {
+    setBloodBankPlan((current) =>
+      current ? { ...current, unitsSecured: current.unitsPlanned, status: 'secured' } : current
+    );
+  }, []);
+
+  const clearBloodBankPlan = useCallback(() => setBloodBankPlan(null), []);
+
+  const openBloodAvailability = useCallback(() => {
+    clearPendingTimers();
+    setStage('blood-availability');
+  }, [clearPendingTimers]);
 
   const raiseRequest = useCallback(() => {
     clearPendingTimers();
-    resetEmergencyState();
-    setActiveRequest(buildInitialRequest());
+    resetDonorFlow();
+    setActiveRequest(buildRequest(requestDraft, bloodBankPlan));
     setStage('request');
-  }, [clearPendingTimers, resetEmergencyState]);
+  }, [clearPendingTimers, resetDonorFlow, requestDraft, bloodBankPlan]);
 
   const startMatching = useCallback(() => {
     clearPendingTimers();
-    setActiveRequest((prev) => ({ ...(prev ?? buildInitialRequest()), status: 'matching' }));
-    setDonors(buildFreshDonors());
-    setPrimaryDonorId(null);
-    setBackupDonorId(null);
-    setScreeningFailed(false);
-    setCoordinationStartTime(null);
-    setCoordinationElapsedMs(0);
-    setEtaSeconds(0);
-    setAlertProgress({ sent: 0, total: 0, lockedAt: null });
+    resetDonorFlow();
+    const request = activeRequest ?? buildRequest(requestDraft, bloodBankPlan);
+    const ranked = rankCompatibleRedCellDonors(buildFreshDonors(), request.bloodGroup);
+    setActiveRequest({ ...request, status: 'matching' });
+    setMatchedDonors(ranked);
     setStage('matching');
-  }, [clearPendingTimers]);
+  }, [clearPendingTimers, resetDonorFlow, activeRequest, requestDraft, bloodBankPlan]);
 
   const startAlerting = useCallback(() => {
-    if (!activeRequest) return;
+    if (!activeRequest || activeRequest.donorUnitsRequired <= 0) return;
     clearAlertTimers();
+    const candidates = matchedDonors.slice(0, 10);
+    const candidateIds = candidates.map((donor) => donor.id);
+    const confirmationIds = candidateIds.slice(0, activeRequest.donorUnitsRequired);
+    const standbyIds = candidateIds.slice(activeRequest.donorUnitsRequired);
+
     setActiveRequest({ ...activeRequest, status: 'alerting' });
-    // Mark all donors as alert-sent; a few will flip to viewing/confirmed/unavailable
-    setDonors((prev) => prev.map((d) => ({ ...d, status: 'alert-sent' as const })));
-    setAlertProgress({ sent: 10, total: 10, lockedAt: null });
+    setAlertedDonorIds(candidateIds);
+    setDonors((current) =>
+      current.map((donor) =>
+        candidateIds.includes(donor.id) ? { ...donor, status: 'alert-sent' } : donor
+      )
+    );
+    setAlertProgress({ sent: candidateIds.length, total: candidateIds.length, lockedAt: null });
     setStage('alerting');
 
-    // Deterministic choreography (matches the brief exactly):
-    // t=0.4s  -> donors 2,3,5,6,7,8,9,10 -> 'viewing'
-    // t=0.7s  -> donor 4 (Sneha)        -> 'unavailable'
-    // t=1.6s  -> donor 1 (Rahul)        -> 'viewing'
-    // t=2.4s  -> donor 1 (Rahul)        -> 'confirmed'  -> lock primary
-    const t1 = setTimeout(() => {
-      setDonors((prev) =>
-        prev.map((d) =>
-          ['d-2', 'd-3', 'd-5', 'd-6', 'd-7', 'd-8', 'd-9', 'd-10'].includes(d.id)
-            ? { ...d, status: 'viewing' }
-            : d
+    const viewingTimer = setTimeout(() => {
+      setDonors((current) =>
+        current.map((donor) =>
+          candidateIds.includes(donor.id) ? { ...donor, status: 'viewing' } : donor
         )
       );
-    }, 400);
-    const t2 = setTimeout(() => {
-      setDonors((prev) =>
-        prev.map((d) => (d.id === 'd-4' ? { ...d, available: false, status: 'unavailable' } : d))
-      );
-    }, 700);
-    const t3 = setTimeout(() => {
-      setDonors((prev) =>
-        prev.map((d) => (d.id === 'd-1' ? { ...d, status: 'viewing' } : d))
-      );
-    }, 1600);
-    const t4 = setTimeout(() => {
-      setDonors((prev) =>
-        prev.map((d) => {
-          if (d.id === 'd-1') return { ...d, status: 'confirmed' };
-          // Pause all other donors except d-4 (already unavailable)
-          if (d.id === 'd-4') return d;
-          return { ...d, status: 'paused' };
-        })
-      );
-      setPrimaryDonorId(DEFAULT_PRIMARY_ID);
-      setActiveRequest((prev) => (prev ? { ...prev, status: 'secured' } : prev));
-      setAlertProgress((p) => ({ ...p, lockedAt: Date.now() }));
-    }, 2400);
+    }, 350);
 
-    alertTimeoutsRef.current = [t1, t2, t3, t4];
-  }, [activeRequest, clearAlertTimers]);
+    const confirmationTimers = confirmationIds.map((donorId, index) =>
+      setTimeout(() => {
+        setDonors((current) =>
+          current.map((donor) => donor.id === donorId ? { ...donor, status: 'confirmed' } : donor)
+        );
+        setConfirmedDonorIds((current) => current.includes(donorId) ? current : [...current, donorId]);
+
+        if (index === confirmationIds.length - 1) {
+          setStandbyDonorIds(standbyIds);
+          setDonors((current) =>
+            current.map((donor) =>
+              standbyIds.includes(donor.id) ? { ...donor, status: 'standby' } : donor
+            )
+          );
+          setActiveRequest((current) => current ? { ...current, status: 'secured' } : current);
+          setAlertProgress((current) => ({ ...current, lockedAt: Date.now() }));
+        }
+      }, (index + 1) * 800)
+    );
+
+    alertTimeoutsRef.current = [viewingTimer, ...confirmationTimers];
+  }, [activeRequest, matchedDonors, clearAlertTimers]);
 
   const finishAlerting = useCallback(() => {
-    if (!activeRequest) return;
+    if (!activeRequest || confirmedDonorIds.length < activeRequest.donorUnitsRequired) return;
     clearAlertTimers();
-    setActiveRequest({ ...activeRequest, status: 'coordination' });
-    setCoordinationStartTime(Date.now());
-    setEtaSeconds(12 * 60);
-    setStage('coordination');
-  }, [activeRequest, clearAlertTimers]);
-
-  const setDonorStatus = useCallback((id: string, status: Donor['status']) => {
-    setDonors((prev) => prev.map((d) => (d.id === id ? { ...d, status } : d)));
-  }, []);
-
-  const lockPrimaryDonor = useCallback((id: string) => {
-    setPrimaryDonorId(id);
-    setDonors((prev) =>
-      prev.map((d) => {
-        if (d.id === id) return { ...d, status: 'confirmed' };
-        if (d.id === 'd-4') return d;
-        return { ...d, status: 'paused' };
+    const nextCoordination = Object.fromEntries(
+      confirmedDonorIds.map((donorId) => {
+        const donor = donors.find((item) => item.id === donorId)!;
+        return [donorId, {
+          donorId,
+          etaSeconds: donor.etaMinutes * 60,
+          travelMode: donor.travelMode,
+          status: 'en-route' as const,
+          isReplacement: false,
+        }];
       })
     );
-    setAlertProgress((p) => ({ ...p, lockedAt: Date.now() }));
-  }, []);
-
-  const activateBackupDonor = useCallback((id: string) => {
-    setBackupDonorId(id);
-    setDonors((prev) =>
-      prev.map((d) => (d.id === id ? { ...d, status: 'confirmed' } : d))
+    setDonorCoordination(nextCoordination);
+    setDonors((current) =>
+      current.map((donor) => confirmedDonorIds.includes(donor.id) ? { ...donor, status: 'en-route' } : donor)
     );
-    setEtaSeconds(16 * 60);
-  }, []);
+    setActiveRequest({ ...activeRequest, status: 'coordination' });
+    setCoordinationStartTime(Date.now());
+    coordinationElapsedRef.current = 0;
+    setCoordinationElapsedMs(0);
+    setStage('coordination');
+  }, [activeRequest, confirmedDonorIds, donors, clearAlertTimers]);
 
   const simulateScreeningFailure = useCallback(() => {
-    clearBackupTimer();
-    setScreeningFailed(true);
-    // After a short delay, activate Priya Sharma as backup.
-    backupTimeoutRef.current = setTimeout(() => {
-      backupTimeoutRef.current = null;
-      activateBackupDonor(DEFAULT_BACKUP_ID);
+    if (replacementPending) return;
+    const failedId = confirmedDonorIds[1] ?? confirmedDonorIds[0];
+    const replacementId = standbyDonorIds[0];
+    if (!failedId || !replacementId) return;
+
+    clearReplacementTimer();
+    setReplacementPending(true);
+    setFailedDonorIds((current) => current.includes(failedId) ? current : [...current, failedId]);
+    setConfirmedDonorIds((current) => current.filter((id) => id !== failedId));
+    setDonors((current) =>
+      current.map((donor) => donor.id === failedId ? { ...donor, status: 'screening-failed' } : donor)
+    );
+    setDonorCoordination((current) => ({
+      ...current,
+      [failedId]: { ...current[failedId], status: 'screening-failed' },
+    }));
+
+    replacementTimeoutRef.current = setTimeout(() => {
+      replacementTimeoutRef.current = null;
+      const replacement = donors.find((donor) => donor.id === replacementId);
+      if (!replacement) return;
+      setConfirmedDonorIds((current) => [...current, replacementId]);
+      setStandbyDonorIds((current) => current.filter((id) => id !== replacementId));
+      setDonors((current) =>
+        current.map((donor) => donor.id === replacementId ? { ...donor, status: 'replacement-confirmed' } : donor)
+      );
+      setDonorCoordination((current) => ({
+        ...current,
+        [replacementId]: {
+          donorId: replacementId,
+          etaSeconds: replacement.etaMinutes * 60,
+          travelMode: replacement.travelMode,
+          status: 'en-route',
+          isReplacement: true,
+        },
+      }));
+      setReplacementCount((current) => current + 1);
+      setReplacementPending(false);
     }, 1400);
-  }, [activateBackupDonor, clearBackupTimer]);
+  }, [replacementPending, confirmedDonorIds, standbyDonorIds, donors, clearReplacementTimer]);
 
-  const completeDonation = useCallback(() => {
-    clearPendingTimers();
-    if (!activeRequest) return;
-    setActiveRequest({ ...activeRequest, status: 'success' });
-    setStage('success');
-  }, [activeRequest, clearPendingTimers]);
-
-  const tickEta = useCallback(() => {
-    setEtaSeconds((s) => (s > 0 ? s - 1 : 0));
+  const tickDonorEtas = useCallback(() => {
+    setDonorCoordination((current) => Object.fromEntries(
+      Object.entries(current).map(([donorId, coordination]) => [
+        donorId,
+        coordination.status === 'screening-failed' || coordination.status === 'donated'
+          ? coordination
+          : { ...coordination, etaSeconds: Math.max(0, coordination.etaSeconds - 1) },
+      ])
+    ));
   }, []);
 
   const tickCoordination = useCallback(() => {
-    setCoordinationElapsedMs((prev) => prev + 1000);
+    coordinationElapsedRef.current += 1000;
+    const elapsed = coordinationElapsedRef.current;
+    setCoordinationElapsedMs(elapsed);
+    setDonorCoordination((current) => Object.fromEntries(
+      Object.entries(current).map(([donorId, coordination], index) => {
+        if (coordination.status === 'screening-failed' || coordination.status === 'donated') {
+          return [donorId, coordination];
+        }
+        const screeningAt = 2500 + index * 400;
+        const readyAt = 4500 + index * 400;
+        const status = elapsed >= readyAt ? 'ready' : elapsed >= screeningAt ? 'screening' : 'en-route';
+        return [donorId, { ...coordination, status }];
+      })
+    ));
   }, []);
+
+  const addCompletedRequest = useCallback((request: EmergencyRequest) => {
+    setRecentRequests((current) => [request, ...current.filter((item) => item.id !== request.id)].slice(0, 4));
+  }, []);
+
+  const completeDonation = useCallback(() => {
+    if (!activeRequest) return;
+    clearPendingTimers();
+    const completedRequest = { ...activeRequest, status: 'success' as const };
+    setActiveRequest(completedRequest);
+    setDonorCoordination((current) => Object.fromEntries(
+      Object.entries(current).map(([donorId, coordination]) => [
+        donorId,
+        coordination.status === 'screening-failed' ? coordination : { ...coordination, status: 'donated' as const },
+      ])
+    ));
+    setDonors((current) =>
+      current.map((donor) => confirmedDonorIds.includes(donor.id) ? { ...donor, status: 'donated' } : donor)
+    );
+    addCompletedRequest(completedRequest);
+    setStage('success');
+  }, [activeRequest, confirmedDonorIds, clearPendingTimers, addCompletedRequest]);
+
+  const completeBloodBankCoverage = useCallback(() => {
+    clearPendingTimers();
+    const request = activeRequest ?? buildRequest(requestDraft, bloodBankPlan);
+    const completedRequest = { ...request, donorUnitsRequired: 0, status: 'success' as const };
+    setActiveRequest(completedRequest);
+    addCompletedRequest(completedRequest);
+    setStage('success');
+  }, [activeRequest, requestDraft, bloodBankPlan, clearPendingTimers, addCompletedRequest]);
 
   const openDonorModal = useCallback((id: string) => setDonorModalDonorId(id), []);
   const closeDonorModal = useCallback(() => setDonorModalDonorId(null), []);
@@ -304,39 +459,47 @@ export function DemoProvider({ children }: { children: ReactNode }) {
   const resetDemo = useCallback(() => {
     clearPendingTimers();
     resetEmergencyState();
-    setStage((current) => (current === 'login' ? 'login' : 'dashboard'));
+    setStage((current) => current === 'login' ? 'login' : 'dashboard');
   }, [clearPendingTimers, resetEmergencyState]);
 
   const value: DemoState & DemoActions = {
     stage,
     role,
     user,
+    requestDraft,
+    bloodBankPlan,
     activeRequest,
     donors,
-    bloodBanks: BLOOD_BANKS,
-    metrics: METRICS,
-    recentRequests: RECENT_REQUESTS,
-    primaryDonorId,
-    backupDonorId,
-    screeningFailed,
+    matchedDonors,
+    alertedDonorIds,
+    confirmedDonorIds,
+    standbyDonorIds,
+    failedDonorIds,
+    donorCoordination,
+    replacementCount,
+    replacementPending,
     coordinationStartTime,
     coordinationElapsedMs,
-    etaSeconds,
     alertProgress,
     donorModalDonorId,
+    metrics: METRICS,
+    recentRequests,
     loginAs,
     logout,
     goTo,
+    updateRequestDraft,
+    selectBloodBankPlan,
+    confirmBloodBankPlan,
+    clearBloodBankPlan,
+    openBloodAvailability,
     raiseRequest,
     startMatching,
     startAlerting,
     finishAlerting,
-    setDonorStatus,
-    lockPrimaryDonor,
-    activateBackupDonor,
     simulateScreeningFailure,
     completeDonation,
-    tickEta,
+    completeBloodBankCoverage,
+    tickDonorEtas,
     tickCoordination,
     openDonorModal,
     closeDonorModal,
@@ -347,7 +510,7 @@ export function DemoProvider({ children }: { children: ReactNode }) {
 }
 
 export function useDemo() {
-  const ctx = useContext(DemoContext);
-  if (!ctx) throw new Error('useDemo must be used inside <DemoProvider>');
-  return ctx;
+  const context = useContext(DemoContext);
+  if (!context) throw new Error('useDemo must be used inside <DemoProvider>');
+  return context;
 }

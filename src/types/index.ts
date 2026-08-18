@@ -1,9 +1,11 @@
-export type UserRole = 'hospital' | 'patient' | 'donor';
+export type UserRole = 'hospital' | 'donor';
 
 export type BloodGroup =
   | 'O-' | 'O+' | 'A-' | 'A+' | 'B-' | 'B+' | 'AB-' | 'AB+';
 
 export type Urgency = 'Critical' | 'High' | 'Moderate';
+export type BloodComponent = 'Red Cells / PRBC';
+export type HospitalType = 'Government' | 'Private' | 'Semi-Government';
 
 export interface Hospital {
   id: string;
@@ -11,6 +13,16 @@ export interface Hospital {
   location: string;
   city: string;
   state: string;
+  district: string;
+  block: string;
+}
+
+export interface EmergencyRequestDraft {
+  patientName: string;
+  bloodGroup: BloodGroup;
+  units: number;
+  urgency: Urgency;
+  requiredWithinMinutes: number;
 }
 
 export interface EmergencyRequest {
@@ -23,6 +35,8 @@ export interface EmergencyRequest {
   location: string;
   urgency: Urgency;
   requiredWithinMinutes: number;
+  bloodBankUnitsSecured: number;
+  donorUnitsRequired: number;
   raisedAt: number; // epoch ms
   status: 'raised' | 'matching' | 'alerting' | 'secured' | 'coordination' | 'success';
 }
@@ -33,7 +47,13 @@ export type DonorStatus =
   | 'viewing'
   | 'confirmed'
   | 'unavailable'
-  | 'paused';
+  | 'paused'
+  | 'standby'
+  | 'en-route'
+  | 'screening'
+  | 'screening-failed'
+  | 'replacement-confirmed'
+  | 'donated';
 
 export interface Donor {
   id: string;
@@ -45,8 +65,51 @@ export interface Donor {
   available: boolean;
   reliability: number; // 0..100
   etaMinutes: number;
+  travelMode: 'Self Travel' | 'Pickup';
   status: DonorStatus;
   phone: string;
+}
+
+export type BloodAvailabilityStatus = 'Available' | 'Low Stock' | 'Unavailable';
+
+export interface BloodAvailabilityRecord {
+  id: string;
+  bloodBankId: string;
+  bloodBankName: string;
+  city: string;
+  phone: string;
+  bloodGroup: BloodGroup;
+  component: BloodComponent;
+  unitsAvailable: number;
+  distanceKm: number;
+  lastUpdated: string;
+  status: BloodAvailabilityStatus;
+}
+
+export interface BloodBankPlan {
+  recordId: string;
+  bloodBankId: string;
+  bloodBankName: string;
+  bloodGroup: BloodGroup;
+  component: BloodComponent;
+  unitsPlanned: number;
+  unitsSecured: number;
+  status: 'selected' | 'secured';
+}
+
+export type DonorTravelStatus =
+  | 'en-route'
+  | 'screening'
+  | 'ready'
+  | 'screening-failed'
+  | 'donated';
+
+export interface DonorCoordination {
+  donorId: string;
+  etaSeconds: number;
+  travelMode: Donor['travelMode'];
+  status: DonorTravelStatus;
+  isReplacement: boolean;
 }
 
 export interface BloodBank {

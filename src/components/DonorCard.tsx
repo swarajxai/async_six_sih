@@ -17,6 +17,41 @@ function StatusRow({ donor }: { donor: Donor }) {
       </div>
     );
   }
+  if (donor.status === 'replacement-confirmed') {
+    return (
+      <div className="flex items-center gap-2 text-emerald-700 font-semibold text-sm">
+        <CheckCircle2 size={16} /> Backup Confirmed
+      </div>
+    );
+  }
+  if (donor.status === 'en-route') {
+    return (
+      <div className="flex items-center gap-2 text-navy-800 font-semibold text-sm">
+        <Clock size={16} /> En Route
+      </div>
+    );
+  }
+  if (donor.status === 'screening') {
+    return (
+      <div className="flex items-center gap-2 text-amber-700 font-semibold text-sm">
+        <Clock size={16} /> Screening
+      </div>
+    );
+  }
+  if (donor.status === 'screening-failed') {
+    return (
+      <div className="flex items-center gap-2 text-red-600 font-semibold text-sm">
+        <XCircle size={16} /> Screening Failed
+      </div>
+    );
+  }
+  if (donor.status === 'donated') {
+    return (
+      <div className="flex items-center gap-2 text-emerald-700 font-semibold text-sm">
+        <CheckCircle2 size={16} /> Donation Completed
+      </div>
+    );
+  }
   if (donor.status === 'unavailable') {
     return (
       <div className="flex items-center gap-2 text-slate-500 text-sm">
@@ -28,6 +63,13 @@ function StatusRow({ donor }: { donor: Donor }) {
     return (
       <div className="flex items-center gap-2 text-slate-500 text-sm">
         <PauseCircle size={16} /> Alert Paused
+      </div>
+    );
+  }
+  if (donor.status === 'standby') {
+    return (
+      <div className="flex items-center gap-2 text-navy-700 text-sm">
+        <PauseCircle size={16} /> Standby
       </div>
     );
   }

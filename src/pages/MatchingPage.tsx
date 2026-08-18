@@ -5,17 +5,18 @@ import Brand from '../components/Brand';
 import DonorCard from '../components/DonorCard';
 import PrimaryButton from '../components/PrimaryButton';
 import { useDemo } from '../context/DemoContext';
+import { getCompatibleRedCellDonorGroups } from '../utils/bloodCompatibility';
 
 const STEPS: { label: string; sub: string; icon: typeof CheckCircle2 }[] = [
-  { label: 'Request verified', sub: 'Hospital authentication · Patient ID validated', icon: CheckCircle2 },
-  { label: 'Blood compatibility checked', sub: 'O- recipients · universal donor compatibility', icon: CheckCircle2 },
+  { label: 'Request verified', sub: 'Hospital authentication · Patient details validated', icon: CheckCircle2 },
+  { label: 'Red-cell compatibility checked', sub: 'Recipient ABO/Rh · compatible donor groups', icon: CheckCircle2 },
   { label: 'Donor eligibility history checked', sub: 'Last donation · medical deferrals · consent', icon: CheckCircle2 },
   { label: 'Nearby donors ranked', sub: 'Distance · reliability · availability', icon: CheckCircle2 },
-  { label: 'Blood bank inventory checked in parallel', sub: 'Partner banks queried in real time', icon: CheckCircle2 },
+  { label: 'Blood-bank contribution accounted', sub: 'Confirmed units deducted before donor coordination', icon: CheckCircle2 },
 ];
 
 export default function MatchingPage() {
-  const { donors, openDonorModal, startAlerting } = useDemo();
+  const { activeRequest, matchedDonors, openDonorModal, startAlerting } = useDemo();
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const [showResults, setShowResults] = useState(false);
@@ -48,8 +49,9 @@ export default function MatchingPage() {
     return () => window.removeEventListener('keydown', onKey);
   }, [showResults]);
 
-  const ranked = useMemo(() => donors.slice(0, 10), [donors]);
+  const ranked = useMemo(() => matchedDonors.slice(0, 10), [matchedDonors]);
   const visible = useMemo(() => ranked.slice(0, 5), [ranked]);
+  const compatibleGroups = activeRequest ? getCompatibleRedCellDonorGroups(activeRequest.bloodGroup) : [];
 
   function onAlert() {
     startAlerting();
@@ -114,8 +116,8 @@ export default function MatchingPage() {
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div>
                   <div className="text-sm text-slate-500">Matching result</div>
-                  <div className="text-2xl font-extrabold text-navy-900">10 Eligible Donors Found</div>
-                  <div className="mt-1 text-xs text-slate-500">Ranked by blood compatibility · distance · eligibility · availability · reliability</div>
+                  <div className="text-2xl font-extrabold text-navy-900">{matchedDonors.length} Eligible Donors Found</div>
+                  <div className="mt-1 text-xs text-slate-500">Red-cell compatible · eligible · available · ranked by distance and reliability</div>
                 </div>
                 <PrimaryButton size="lg" onClick={onAlert}>
                   <Bell size={18} /> Alert Top 10 Donors Simultaneously
@@ -128,7 +130,7 @@ export default function MatchingPage() {
                 ))}
               </div>
               <div className="mt-3 text-xs text-slate-500 text-center">
-                Showing top 5 of 10 matched donors · click any card to preview the donor-side alert
+                Showing top {Math.min(5, matchedDonors.length)} of {matchedDonors.length} matched donors · click any card to preview the donor-side alert
               </div>
             </div>
           )}
@@ -138,8 +140,8 @@ export default function MatchingPage() {
         <aside className="space-y-4">
           <div className="rounded-2xl bg-white shadow-card ring-1 ring-slate-100 p-5">
             <div className="text-xs uppercase tracking-wider text-slate-500 font-semibold">Request</div>
-            <div className="mt-1 text-base font-semibold text-navy-900">Aarav Mishra</div>
-            <div className="mt-1 text-sm text-slate-600">O- · 2 units · Critical · 60 min</div>
+            <div className="mt-1 text-base font-semibold text-navy-900">{activeRequest?.patientName ?? 'Aarav Mishra'}</div>
+            <div className="mt-1 text-sm text-slate-600">{activeRequest?.bloodGroup ?? 'O-'} · {activeRequest?.donorUnitsRequired ?? 0} donor units · {activeRequest?.urgency ?? 'Critical'} · {activeRequest?.requiredWithinMinutes ?? 60} min</div>
           </div>
           <div className="rounded-2xl bg-navy-900 text-white shadow-card p-5">
             <div className="text-xs uppercase tracking-wider text-white/70 font-semibold">Ranking Factors</div>
@@ -150,6 +152,9 @@ export default function MatchingPage() {
               <li className="flex items-center gap-2"><CheckCircle2 size={14} className="text-emerald-300" /> Availability</li>
               <li className="flex items-center gap-2"><CheckCircle2 size={14} className="text-emerald-300" /> Reliability</li>
             </ul>
+            <div className="mt-3 pt-3 border-t border-white/10 text-xs text-white/70">
+              Compatible red-cell donor groups: {compatibleGroups.join(', ')}
+            </div>
           </div>
           {!showResults && (
             <button
@@ -180,6 +185,9 @@ export default function MatchingPage() {
             <p className="mt-1">
               LIFE-LINK doesn't make the hospital call donors one-by-one. One tap alerts the top 10 at once.
             </p>
+          </div>
+          <div className="rounded-2xl bg-slate-100 ring-1 ring-slate-200 p-4 text-xs text-slate-600">
+            Compatibility is a red-cell matching aid. Clinical cross-matching and screening determine final transfusion suitability.
           </div>
         </aside>
       </main>

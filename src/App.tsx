@@ -3,6 +3,7 @@ import DemoBanner from './components/DemoBanner';
 import DonorAlertModal from './components/DonorAlertModal';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
+import BloodAvailabilityPage from './pages/BloodAvailabilityPage';
 import EmergencyRequestPage from './pages/EmergencyRequestPage';
 import MatchingPage from './pages/MatchingPage';
 import AlertingPage from './pages/AlertingPage';
@@ -37,6 +38,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <EmergencyRequestPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/blood-availability"
+            element={
+              <ProtectedRoute>
+                <BloodAvailabilityPage />
               </ProtectedRoute>
             }
           />

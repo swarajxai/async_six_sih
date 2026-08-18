@@ -1,8 +1,9 @@
 import { useNavigate } from 'react-router-dom';
-import { Activity, Droplet, HeartPulse, Hospital, Plus, Users } from 'lucide-react';
+import { Activity, ArrowRight, Droplet, HeartPulse, Hospital, Plus, Search, Users } from 'lucide-react';
 import Brand from '../components/Brand';
 import MetricCard from '../components/MetricCard';
 import PrimaryButton from '../components/PrimaryButton';
+import SecondaryButton from '../components/SecondaryButton';
 import EmergencyBadge from '../components/EmergencyBadge';
 import { useDemo } from '../context/DemoContext';
 import { formatElapsed } from '../utils/time';
@@ -25,12 +26,17 @@ function timeAgo(ms: number): string {
 }
 
 export default function DashboardPage() {
-  const { metrics, recentRequests, user, raiseRequest } = useDemo();
+  const { metrics, recentRequests, user, raiseRequest, openBloodAvailability } = useDemo();
   const navigate = useNavigate();
 
   function onRaise() {
     raiseRequest();
     navigate('/request');
+  }
+
+  function onCheckAvailability() {
+    openBloodAvailability();
+    navigate('/blood-availability');
   }
 
   return (
@@ -57,13 +63,18 @@ export default function DashboardPage() {
             </h1>
             <p className="text-sm text-slate-500 mt-1">Burla, Sambalpur, Odisha</p>
           </div>
-          <PrimaryButton size="lg" onClick={onRaise}>
-            <Plus size={18} /> Raise Emergency Request
-          </PrimaryButton>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <SecondaryButton size="lg" onClick={onCheckAvailability}>
+              <Search size={18} /> Check Blood Availability
+            </SecondaryButton>
+            <PrimaryButton size="lg" onClick={onRaise}>
+              <Plus size={18} /> Raise Emergency Request
+            </PrimaryButton>
+          </div>
         </section>
 
         {/* Metrics */}
-        <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <section className="grid sm:grid-cols-3 gap-3 sm:gap-4">
           <MetricCard
             icon={Activity}
             label="Active Emergencies"
@@ -79,19 +90,23 @@ export default function DashboardPage() {
             tone="navy"
           />
           <MetricCard
-            icon={Droplet}
-            label="Units Available"
-            value={metrics.bloodUnitsAvailable}
-            hint="Across partner blood banks"
-            tone="amber"
-          />
-          <MetricCard
             icon={HeartPulse}
             label="Coordinations Today"
             value={metrics.successfulCoordinationsToday}
             hint="Successful matches"
             tone="green"
           />
+        </section>
+
+        <section className="rounded-2xl bg-white shadow-card ring-1 ring-slate-100 p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="grid place-items-center h-10 w-10 rounded-xl bg-red-50 text-emergency"><Droplet size={20} /></div>
+            <div>
+              <h2 className="font-bold text-navy-900">Blood Bank Availability</h2>
+              <p className="mt-1 text-sm text-slate-500">Check nearby PRBC stock first, then alert donors only for remaining units.</p>
+            </div>
+          </div>
+          <SecondaryButton onClick={onCheckAvailability}>Check Availability <ArrowRight size={16} /></SecondaryButton>
         </section>
 
         {/* Recent Requests */}
