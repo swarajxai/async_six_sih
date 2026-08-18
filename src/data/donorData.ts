@@ -1,4 +1,5 @@
 import { HOSPITAL, INITIAL_REQUEST_DRAFT, RANKED_DONORS } from './demoData';
+import { DEMO_BLOOD_AVAILABILITY } from './bloodAvailabilityData';
 import type {
   BloodGroup,
   DonationHistoryItem,
@@ -16,8 +17,10 @@ export const DONATION_BASE_POINTS = 100;
 export const NIGHT_EMERGENCY_BONUS_POINTS = 50;
 
 const sharedRahul = RANKED_DONORS.find((donor) => donor.id === DEMO_DONOR_ID);
+const sharedVssContact = DEMO_BLOOD_AVAILABILITY.find((record) => record.bloodBankId === 'bb-vss')?.phone;
 
 if (!sharedRahul) throw new Error('The shared Rahul Das demo donor is missing.');
+if (!sharedVssContact) throw new Error('The shared VSS emergency contact is missing.');
 
 export const DONOR_DEMO_CREDENTIALS = {
   phone: sharedRahul.phone.replace(/\D/g, '').slice(-10),
@@ -25,6 +28,7 @@ export const DONOR_DEMO_CREDENTIALS = {
 };
 
 export const DEMO_DONOR_ETA_MINUTES = sharedRahul.etaMinutes;
+export const DEMO_PICKUP_ETA_MINUTES = 6;
 
 export const INITIAL_DONOR_PROFILE: DonorProfile = {
   donorId: sharedRahul.id,
@@ -38,8 +42,8 @@ export const INITIAL_DONOR_PROFILE: DonorProfile = {
   state: 'Odisha',
   district: 'Sambalpur',
   pinCode: '768017',
-  maskedIdentity: 'XXXX XXXX 9012',
-  identityStatus: 'Demo e-KYC Verified',
+  mobileVerified: true,
+  lastDonationDate: '2026-07-12',
   availableForEmergency: true,
   nightEmergencyVolunteer: true,
 };
@@ -81,6 +85,7 @@ export const DONOR_INCOMING_EMERGENCY: DonorIncomingEmergency = {
   urgency: INITIAL_REQUEST_DRAFT.urgency,
   requiredWithinMinutes: INITIAL_REQUEST_DRAFT.requiredWithinMinutes,
   verifiedHospital: true,
+  hospitalPhone: sharedVssContact,
   isNightEmergency: false,
 };
 

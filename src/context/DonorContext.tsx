@@ -43,7 +43,7 @@ interface DonorActions {
   createDonorAccount: (
     phone: string,
     password: string,
-    profilePatch: Pick<DonorProfile, 'bloodGroup' | 'email' | 'nightEmergencyVolunteer'>,
+    profilePatch: Pick<DonorProfile, 'fullName' | 'dateOfBirth' | 'gender' | 'bloodGroup' | 'email' | 'address' | 'state' | 'district' | 'pinCode' | 'lastDonationDate' | 'nightEmergencyVolunteer'>,
   ) => void;
   answerEligibilityQuestion: (id: string, answer: boolean) => void;
   useDemoEligibleAnswers: () => void;
@@ -53,6 +53,7 @@ interface DonorActions {
   respondToEmergency: (response: Exclude<DonorEmergencyResponse, 'pending'>) => void;
   resetEmergencyResponse: () => void;
   chooseTravelMode: (mode: DonorTravelMode) => void;
+  startJourney: () => void;
   markArrived: () => void;
   beginScreening: () => void;
   clearScreening: () => void;
@@ -129,11 +130,11 @@ export function DonorProvider({ children }: { children: ReactNode }) {
   const createDonorAccount = useCallback((
     phone: string,
     password: string,
-    profilePatch: Pick<DonorProfile, 'bloodGroup' | 'email' | 'nightEmergencyVolunteer'>,
+    profilePatch: Pick<DonorProfile, 'fullName' | 'dateOfBirth' | 'gender' | 'bloodGroup' | 'email' | 'address' | 'state' | 'district' | 'pinCode' | 'lastDonationDate' | 'nightEmergencyVolunteer'>,
   ) => {
     const normalizedPhone = phone.replace(/\D/g, '').slice(-10);
     setCredentials({ phone: normalizedPhone, password });
-    setProfile((current) => ({ ...current, ...profilePatch, phone: normalizedPhone }));
+    setProfile((current) => ({ ...current, ...profilePatch, phone: normalizedPhone, mobileVerified: true }));
   }, []);
 
   const answerEligibilityQuestion = useCallback((id: string, answer: boolean) => {
@@ -179,8 +180,10 @@ export function DonorProvider({ children }: { children: ReactNode }) {
 
   const chooseTravelMode = useCallback((mode: DonorTravelMode) => {
     setTravelMode(mode);
-    setJourneyStatus('en-route');
+    setJourneyStatus('travel-selected');
   }, []);
+
+  const startJourney = useCallback(() => setJourneyStatus('en-route'), []);
 
   const markArrived = useCallback(() => setJourneyStatus('arrived'), []);
   const beginScreening = useCallback(() => setJourneyStatus('screening'), []);
@@ -243,6 +246,7 @@ export function DonorProvider({ children }: { children: ReactNode }) {
     respondToEmergency,
     resetEmergencyResponse,
     chooseTravelMode,
+    startJourney,
     markArrived,
     beginScreening,
     clearScreening,
@@ -273,6 +277,7 @@ export function DonorProvider({ children }: { children: ReactNode }) {
     respondToEmergency,
     resetEmergencyResponse,
     chooseTravelMode,
+    startJourney,
     markArrived,
     beginScreening,
     clearScreening,

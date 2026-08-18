@@ -109,11 +109,12 @@ export interface DonorCoordination {
   isReplacement: boolean;
 }
 
-export type DonorGender = 'Male' | 'Female' | 'Other';
+export type DonorGender = 'Male' | 'Female' | 'Other / Prefer not to say';
 export type DonorEligibilityResult = 'pending' | 'likely-eligible' | 'review-required';
 export type DonorEmergencyResponse = 'pending' | 'accepted' | 'unavailable';
 export type DonorJourneyStatus =
   | 'idle'
+  | 'travel-selected'
   | 'en-route'
   | 'arrived'
   | 'screening'
@@ -133,8 +134,8 @@ export interface DonorProfile {
   state: string;
   district: string;
   pinCode: string;
-  maskedIdentity: string;
-  identityStatus: 'Demo e-KYC Verified';
+  mobileVerified: boolean;
+  lastDonationDate?: string | null;
   availableForEmergency: boolean;
   nightEmergencyVolunteer: boolean;
 }
@@ -172,6 +173,7 @@ export interface DonorIncomingEmergency {
   urgency: Urgency;
   requiredWithinMinutes: number;
   verifiedHospital: boolean;
+  hospitalPhone: string;
   isNightEmergency: boolean;
 }
 

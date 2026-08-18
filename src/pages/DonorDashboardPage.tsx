@@ -97,7 +97,7 @@ export default function DonorDashboardPage() {
 
         <section className="rounded-2xl bg-white shadow-card ring-1 ring-slate-100 p-5 sm:p-6" id="profile">
           <div className="flex items-center gap-2"><UserRound size={18} className="text-navy-700" /><h2 className="text-lg font-bold text-navy-900">Donor Profile</h2></div>
-          <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3"><Detail label="Name" value={profile.fullName} /><Detail label="Blood Group" value={profile.bloodGroup} /><Detail label="Date of Birth" value={profile.dateOfBirth} /><Detail label="Gender" value={profile.gender} /><Detail label="Phone" value={profile.phone} /><Detail label="Identity" value={profile.maskedIdentity} /><Detail label="Verification" value={profile.identityStatus} /><Detail label="Address" value={`${profile.address}, ${profile.pinCode}`} /></div>
+          <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3"><Detail label="Name" value={profile.fullName} /><Detail label="Blood Group" value={profile.bloodGroup} /><Detail label="Date of Birth" value={profile.dateOfBirth} /><Detail label="Gender" value={profile.gender} /><Detail label="Phone" value={profile.phone} /><Detail label="Mobile Verification" value={profile.mobileVerified ? 'Verified' : 'Pending'} /><Detail label="Location" value={`${profile.district}, ${profile.state}`} /><Detail label="Address" value={`${profile.address}, ${profile.pinCode}`} /></div>
           <div className="mt-3 text-xs text-slate-500 flex items-start gap-2"><Phone size={13} className="mt-0.5" /> Location is shared only when required for active emergency coordination.</div>
         </section>
       </main>
