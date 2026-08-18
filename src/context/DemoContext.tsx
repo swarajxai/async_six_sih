@@ -52,6 +52,7 @@ interface DemoState {
   standbyDonorIds: string[];
   failedDonorIds: string[];
   donorCoordination: Record<string, DonorCoordination>;
+  trackedDonorId: string | null;
   replacementCount: number;
   replacementPending: boolean;
   coordinationStartTime: number | null;
@@ -68,16 +69,15 @@ interface DemoActions {
   goTo: (stage: Stage) => void;
   updateRequestDraft: (patch: Partial<EmergencyRequestDraft>) => void;
   selectBloodBankPlan: (record: BloodAvailabilityRecord, units: number) => void;
-  confirmBloodBankPlan: () => void;
   clearBloodBankPlan: () => void;
   openBloodAvailability: () => void;
   raiseRequest: () => void;
   startMatching: () => void;
   startAlerting: () => void;
   finishAlerting: () => void;
+  selectDonorForTracking: (id: string) => void;
   simulateScreeningFailure: () => void;
   completeDonation: () => void;
-  completeBloodBankCoverage: () => void;
   tickDonorEtas: () => void;
   tickCoordination: () => void;
   openDonorModal: (id: string) => void;
@@ -91,19 +91,12 @@ function buildFreshDonors(): Donor[] {
   return RANKED_DONORS.map((donor) => ({ ...donor, status: 'idle' }));
 }
 
-function getSecuredUnits(draft: EmergencyRequestDraft, plan: BloodBankPlan | null): number {
-  if (!plan || plan.status !== 'secured' || plan.bloodGroup !== draft.bloodGroup) return 0;
-  return Math.max(0, Math.min(draft.units, plan.unitsSecured));
-}
-
 function buildRequest(
   draft: EmergencyRequestDraft,
-  plan: BloodBankPlan | null,
   status: EmergencyRequest['status'] = 'raised',
   raisedAt = Date.now(),
 ): EmergencyRequest {
-  const units = Math.max(1, draft.units);
-  const bloodBankUnitsSecured = getSecuredUnits({ ...draft, units }, plan);
+  const units = Math.max(1, Math.min(10, draft.units));
   return {
     id: 'req-aarav-001',
     ...draft,
@@ -111,8 +104,6 @@ function buildRequest(
     hospitalId: HOSPITAL.id,
     hospitalName: HOSPITAL.name,
     location: HOSPITAL.location,
-    bloodBankUnitsSecured,
-    donorUnitsRequired: Math.max(0, units - bloodBankUnitsSecured),
     raisedAt,
     status,
   };
@@ -132,6 +123,7 @@ export function DemoProvider({ children }: { children: ReactNode }) {
   const [standbyDonorIds, setStandbyDonorIds] = useState<string[]>([]);
   const [failedDonorIds, setFailedDonorIds] = useState<string[]>([]);
   const [donorCoordination, setDonorCoordination] = useState<Record<string, DonorCoordination>>({});
+  const [trackedDonorId, setTrackedDonorId] = useState<string | null>(null);
   const [replacementCount, setReplacementCount] = useState(0);
   const [replacementPending, setReplacementPending] = useState(false);
   const [coordinationStartTime, setCoordinationStartTime] = useState<number | null>(null);
@@ -181,6 +173,7 @@ export function DemoProvider({ children }: { children: ReactNode }) {
     setStandbyDonorIds([]);
     setFailedDonorIds([]);
     setDonorCoordination({});
+    setTrackedDonorId(null);
     setReplacementCount(0);
     setReplacementPending(false);
     setCoordinationStartTime(null);
@@ -217,24 +210,16 @@ export function DemoProvider({ children }: { children: ReactNode }) {
     const nextDraft = {
       ...requestDraft,
       ...patch,
-      units: Math.max(1, Number(patch.units ?? requestDraft.units)),
+      units: Math.max(1, Math.min(10, Number(patch.units ?? requestDraft.units))),
     };
-    const nextPlan = bloodBankPlan?.bloodGroup === nextDraft.bloodGroup
-      ? {
-          ...bloodBankPlan,
-          unitsPlanned: Math.min(nextDraft.units, bloodBankPlan.unitsPlanned),
-          unitsSecured: Math.min(nextDraft.units, bloodBankPlan.unitsSecured),
-        }
-      : null;
     setRequestDraft(nextDraft);
-    setBloodBankPlan(nextPlan);
     setActiveRequest((current) =>
-      current ? buildRequest(nextDraft, nextPlan, current.status, current.raisedAt) : current
+      current ? buildRequest(nextDraft, current.status, current.raisedAt) : current
     );
-  }, [requestDraft, bloodBankPlan]);
+  }, [requestDraft]);
 
   const selectBloodBankPlan = useCallback((record: BloodAvailabilityRecord, units: number) => {
-    const unitsPlanned = Math.max(1, Math.min(record.unitsAvailable, requestDraft.units, units));
+    const unitsPlanned = Math.max(1, Math.min(record.unitsAvailable, units));
     setBloodBankPlan({
       recordId: record.id,
       bloodBankId: record.bloodBankId,
@@ -242,15 +227,8 @@ export function DemoProvider({ children }: { children: ReactNode }) {
       bloodGroup: record.bloodGroup,
       component: record.component,
       unitsPlanned,
-      unitsSecured: 0,
       status: 'selected',
     });
-  }, [requestDraft.units]);
-
-  const confirmBloodBankPlan = useCallback(() => {
-    setBloodBankPlan((current) =>
-      current ? { ...current, unitsSecured: current.unitsPlanned, status: 'secured' } : current
-    );
   }, []);
 
   const clearBloodBankPlan = useCallback(() => setBloodBankPlan(null), []);
@@ -263,27 +241,27 @@ export function DemoProvider({ children }: { children: ReactNode }) {
   const raiseRequest = useCallback(() => {
     clearPendingTimers();
     resetDonorFlow();
-    setActiveRequest(buildRequest(requestDraft, bloodBankPlan));
+    setActiveRequest(buildRequest(requestDraft));
     setStage('request');
-  }, [clearPendingTimers, resetDonorFlow, requestDraft, bloodBankPlan]);
+  }, [clearPendingTimers, resetDonorFlow, requestDraft]);
 
   const startMatching = useCallback(() => {
     clearPendingTimers();
     resetDonorFlow();
-    const request = activeRequest ?? buildRequest(requestDraft, bloodBankPlan);
+    const request = activeRequest ?? buildRequest(requestDraft);
     const ranked = rankCompatibleRedCellDonors(buildFreshDonors(), request.bloodGroup);
     setActiveRequest({ ...request, status: 'matching' });
     setMatchedDonors(ranked);
     setStage('matching');
-  }, [clearPendingTimers, resetDonorFlow, activeRequest, requestDraft, bloodBankPlan]);
+  }, [clearPendingTimers, resetDonorFlow, activeRequest, requestDraft]);
 
   const startAlerting = useCallback(() => {
-    if (!activeRequest || activeRequest.donorUnitsRequired <= 0) return;
+    if (!activeRequest || activeRequest.units <= 0) return;
     clearAlertTimers();
     const candidates = matchedDonors.slice(0, 10);
     const candidateIds = candidates.map((donor) => donor.id);
-    const confirmationIds = candidateIds.slice(0, activeRequest.donorUnitsRequired);
-    const standbyIds = candidateIds.slice(activeRequest.donorUnitsRequired);
+    const confirmationIds = candidateIds.slice(0, activeRequest.units);
+    const standbyIds = candidateIds.slice(activeRequest.units);
 
     setActiveRequest({ ...activeRequest, status: 'alerting' });
     setAlertedDonorIds(candidateIds);
@@ -327,7 +305,7 @@ export function DemoProvider({ children }: { children: ReactNode }) {
   }, [activeRequest, matchedDonors, clearAlertTimers]);
 
   const finishAlerting = useCallback(() => {
-    if (!activeRequest || confirmedDonorIds.length < activeRequest.donorUnitsRequired) return;
+    if (!activeRequest || confirmedDonorIds.length < activeRequest.units) return;
     clearAlertTimers();
     const nextCoordination = Object.fromEntries(
       confirmedDonorIds.map((donorId) => {
@@ -342,6 +320,7 @@ export function DemoProvider({ children }: { children: ReactNode }) {
       })
     );
     setDonorCoordination(nextCoordination);
+    setTrackedDonorId(confirmedDonorIds[0] ?? null);
     setDonors((current) =>
       current.map((donor) => confirmedDonorIds.includes(donor.id) ? { ...donor, status: 'en-route' } : donor)
     );
@@ -352,11 +331,13 @@ export function DemoProvider({ children }: { children: ReactNode }) {
     setStage('coordination');
   }, [activeRequest, confirmedDonorIds, donors, clearAlertTimers]);
 
+  const selectDonorForTracking = useCallback((id: string) => setTrackedDonorId(id), []);
+
   const simulateScreeningFailure = useCallback(() => {
     if (replacementPending) return;
-    const failedId = confirmedDonorIds[1] ?? confirmedDonorIds[0];
+    const failedId = trackedDonorId;
     const replacementId = standbyDonorIds[0];
-    if (!failedId || !replacementId) return;
+    if (!failedId || !confirmedDonorIds.includes(failedId) || !replacementId) return;
 
     clearReplacementTimer();
     setReplacementPending(true);
@@ -390,9 +371,10 @@ export function DemoProvider({ children }: { children: ReactNode }) {
         },
       }));
       setReplacementCount((current) => current + 1);
+      setTrackedDonorId(replacementId);
       setReplacementPending(false);
     }, 1400);
-  }, [replacementPending, confirmedDonorIds, standbyDonorIds, donors, clearReplacementTimer]);
+  }, [replacementPending, trackedDonorId, confirmedDonorIds, standbyDonorIds, donors, clearReplacementTimer]);
 
   const tickDonorEtas = useCallback(() => {
     setDonorCoordination((current) => Object.fromEntries(
@@ -444,15 +426,6 @@ export function DemoProvider({ children }: { children: ReactNode }) {
     setStage('success');
   }, [activeRequest, confirmedDonorIds, clearPendingTimers, addCompletedRequest]);
 
-  const completeBloodBankCoverage = useCallback(() => {
-    clearPendingTimers();
-    const request = activeRequest ?? buildRequest(requestDraft, bloodBankPlan);
-    const completedRequest = { ...request, donorUnitsRequired: 0, status: 'success' as const };
-    setActiveRequest(completedRequest);
-    addCompletedRequest(completedRequest);
-    setStage('success');
-  }, [activeRequest, requestDraft, bloodBankPlan, clearPendingTimers, addCompletedRequest]);
-
   const openDonorModal = useCallback((id: string) => setDonorModalDonorId(id), []);
   const closeDonorModal = useCallback(() => setDonorModalDonorId(null), []);
 
@@ -476,6 +449,7 @@ export function DemoProvider({ children }: { children: ReactNode }) {
     standbyDonorIds,
     failedDonorIds,
     donorCoordination,
+    trackedDonorId,
     replacementCount,
     replacementPending,
     coordinationStartTime,
@@ -489,16 +463,15 @@ export function DemoProvider({ children }: { children: ReactNode }) {
     goTo,
     updateRequestDraft,
     selectBloodBankPlan,
-    confirmBloodBankPlan,
     clearBloodBankPlan,
     openBloodAvailability,
     raiseRequest,
     startMatching,
     startAlerting,
     finishAlerting,
+    selectDonorForTracking,
     simulateScreeningFailure,
     completeDonation,
-    completeBloodBankCoverage,
     tickDonorEtas,
     tickCoordination,
     openDonorModal,

@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Award, Building2, Heart, RefreshCcw, Sparkles, Star, Timer, Users } from 'lucide-react';
+import { ArrowLeft, Award, Heart, RefreshCcw, Sparkles, Star, Timer, Users } from 'lucide-react';
 import Brand from '../components/Brand';
 import EmergencyBadge from '../components/EmergencyBadge';
 import PrimaryButton from '../components/PrimaryButton';
@@ -23,20 +23,16 @@ export default function SuccessPage() {
   const successfulDonors = confirmedDonorIds
     .map((id) => donors.find((donor) => donor.id === id))
     .filter((donor): donor is NonNullable<typeof donor> => !!donor);
-  const totalRequired = activeRequest?.units ?? 0;
-  const bankUnits = activeRequest?.bloodBankUnitsSecured ?? 0;
-  const donorUnits = activeRequest?.donorUnitsRequired ?? 0;
-  const totalSecured = Math.min(totalRequired, bankUnits + successfulDonors.length);
-  const bankOnly = donorUnits === 0;
+  const donorUnitsRequired = activeRequest?.units ?? 0;
   const elapsedLabel = coordinationElapsedMs > 0 ? formatElapsed(coordinationElapsedMs) : '0m 00s';
 
   const entries: TimelineEntry[] = [
     { stage: 'request-raised', label: 'Verified hospital request created', done: true, active: false },
-    { stage: 'donors-matched', label: bankOnly ? 'Blood-bank coverage confirmed' : 'Compatible donors matched and alerted', done: true, active: false },
-    { stage: 'donor-confirmed', label: bankOnly ? 'No donor alerts required' : `${successfulDonors.length} donor contributions secured`, done: true, active: false },
-    { stage: 'en-route', label: bankOnly ? 'Blood-bank source coordinated' : 'Donor travel coordinated', done: true, active: false },
+    { stage: 'donors-matched', label: 'Compatible donors matched and alerted', done: true, active: false },
+    { stage: 'donor-confirmed', label: `${successfulDonors.length} donor contributions secured`, done: true, active: false },
+    { stage: 'en-route', label: 'Individual donor travel coordinated', done: true, active: false },
     { stage: 'screening', label: replacementCount ? 'Screening failure replaced from standby' : 'Screening completed', done: true, active: false },
-    { stage: 'donation', label: 'Blood requirement coordinated', done: true, active: false },
+    { stage: 'donation', label: 'Emergency donor coordination completed', done: true, active: false },
   ];
 
   function onBack() {
@@ -61,23 +57,21 @@ export default function SuccessPage() {
         <section className="lg:col-span-2 space-y-6">
           <div className="rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-pop p-6 sm:p-8">
             <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-white/85 font-semibold"><Sparkles size={14} /> Live Hospital Status</div>
-            <h1 className="mt-2 text-3xl sm:text-4xl font-extrabold leading-tight">Blood Requirement Coordinated Successfully</h1>
-            <p className="mt-1 text-white/85">Multiple sources coordinated for one complete patient requirement.</p>
+            <h1 className="mt-2 text-3xl sm:text-4xl font-extrabold leading-tight">Emergency Donor Coordination Successful</h1>
+            <p className="mt-1 text-white/85">LIFE-LINK coordinated one distinct donor for every requested donor unit.</p>
             <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <Stat label="Total Required" value={`${totalRequired} units`} />
-              <Stat label="Blood Bank" value={`${bankUnits} units`} />
-              <Stat label="Individual Donors" value={`${donorUnits} units`} />
-              <Stat label="Total Secured" value={`${totalSecured} / ${totalRequired} units`} />
+              <Stat label="Donor Units Requested" value={`${donorUnitsRequired} units`} />
+              <Stat label="Successfully Coordinated" value={`${successfulDonors.length} / ${donorUnitsRequired}`} />
+              <Stat label="Screening Failures" value={String(failedDonorIds.length)} />
+              <Stat label="Standby Replacements" value={String(replacementCount)} />
             </div>
             <div className="mt-5 flex flex-wrap items-center gap-2">
               <EmergencyBadge tone="green" dot>Requirement Fulfilled</EmergencyBadge>
               {replacementCount > 0 && <EmergencyBadge tone="amber">{replacementCount} standby replacement activated</EmergencyBadge>}
-              {bankOnly && <EmergencyBadge tone="navy">Blood-bank coverage only</EmergencyBadge>}
             </div>
           </div>
 
-          {successfulDonors.length > 0 && (
-            <div className="rounded-2xl bg-white shadow-card ring-1 ring-slate-100 p-5 sm:p-6">
+          <div className="rounded-2xl bg-white shadow-card ring-1 ring-slate-100 p-5 sm:p-6">
               <div className="flex items-center gap-2"><Users size={18} className="text-navy-700" /><h2 className="text-lg font-bold text-navy-900">Successful Individual Donors</h2></div>
               <div className="mt-4 grid sm:grid-cols-3 gap-3">
                 {successfulDonors.map((donor) => (
@@ -87,9 +81,8 @@ export default function SuccessPage() {
                   </div>
                 ))}
               </div>
-              {failedDonorIds.length > 0 && <div className="mt-3 text-xs text-slate-500">{failedDonorIds.length} donor screening failure retained in coordination history.</div>}
-            </div>
-          )}
+              <div className="mt-3 text-xs text-slate-500">Initial confirmations: {donorUnitsRequired} · Screening failures: {failedDonorIds.length} · Standby replacements: {replacementCount} · Final active donors: {successfulDonors.length}</div>
+          </div>
 
           <div className="rounded-2xl bg-white shadow-card ring-1 ring-slate-100 p-5 sm:p-6">
             <h2 className="text-lg font-bold text-navy-900">Request Timeline</h2>
@@ -103,29 +96,21 @@ export default function SuccessPage() {
         </section>
 
         <aside className="space-y-4">
-          {successfulDonors.length > 0 ? (
-            <div className="rounded-2xl bg-white shadow-card ring-1 ring-slate-100 p-5">
+          <div className="rounded-2xl bg-white shadow-card ring-1 ring-slate-100 p-5">
               <div className="text-xs uppercase tracking-wider text-slate-500 font-semibold">Donor Recognition</div>
               <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-amber-50 text-amber-800 ring-1 ring-amber-200 px-3 py-1.5 text-sm font-bold"><Star size={14} className="text-amber-500" fill="currentColor" /> +100 points each</div>
               <div className="mt-3 rounded-xl bg-navy-900 text-white p-4 flex items-center gap-3">
                 <div className="grid place-items-center h-10 w-10 rounded-lg bg-white/10"><Award size={20} className="text-amber-300" /></div>
                 <div><div className="text-xs text-white/70">Badge</div><div className="font-bold">Emergency Responder</div></div>
               </div>
-            </div>
-          ) : (
-            <div className="rounded-2xl bg-white shadow-card ring-1 ring-slate-100 p-5">
-              <div className="grid place-items-center h-10 w-10 rounded-xl bg-emerald-50 text-emerald-700"><Building2 size={20} /></div>
-              <div className="mt-3 font-bold text-navy-900">Blood-Bank Coverage Confirmed</div>
-              <p className="mt-1 text-xs text-slate-500">The patient requirement was covered without unnecessary donor alerts.</p>
-            </div>
-          )}
+          </div>
 
           <div className="rounded-2xl bg-white shadow-card ring-1 ring-slate-100 p-5">
             <div className="text-xs uppercase tracking-wider text-slate-500 font-semibold">Network Impact</div>
             <ul className="mt-3 space-y-2 text-sm text-slate-700">
               <li className="flex items-center gap-2"><Heart size={14} className="text-red-500" /> 1 patient requirement fulfilled</li>
               <li className="flex items-center gap-2"><Timer size={14} className="text-navy-700" /> {elapsedLabel} demo coordination time</li>
-              <li className="flex items-center gap-2"><Sparkles size={14} className="text-amber-500" /> {bankUnits + donorUnits} total units coordinated</li>
+              <li className="flex items-center gap-2"><Sparkles size={14} className="text-amber-500" /> {successfulDonors.length} donor units coordinated</li>
             </ul>
           </div>
         </aside>

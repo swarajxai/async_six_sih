@@ -5,9 +5,13 @@ import EmergencyBadge from './EmergencyBadge';
 export default function CoordinationDonorCard({
   donor,
   coordination,
+  selected = false,
+  onClick,
 }: {
   donor: Donor;
   coordination: DonorCoordination;
+  selected?: boolean;
+  onClick?: () => void;
 }) {
   const statusLabel = coordination.status === 'screening-failed'
     ? 'Screening Failed'
@@ -27,7 +31,23 @@ export default function CoordinationDonorCard({
       : 'green';
 
   return (
-    <div className="rounded-2xl bg-white p-4 shadow-card ring-1 ring-slate-100">
+    <div
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      aria-pressed={onClick ? selected : undefined}
+      onClick={onClick}
+      onKeyDown={(event) => {
+        if (onClick && (event.key === 'Enter' || event.key === ' ')) {
+          event.preventDefault();
+          onClick();
+        }
+      }}
+      className={[
+        'rounded-2xl bg-white p-4 shadow-card ring-1 transition',
+        selected ? 'ring-2 ring-navy-400' : 'ring-slate-100',
+        onClick ? 'cursor-pointer hover:ring-navy-300 focus:outline-none focus:ring-2 focus:ring-navy-500' : '',
+      ].join(' ')}
+    >
       <div className="flex items-start gap-3">
         <div className="grid place-items-center h-10 w-10 rounded-full bg-navy-900 text-white font-bold text-sm">
           {donor.name.split(' ').map((part) => part[0]).slice(0, 2).join('')}

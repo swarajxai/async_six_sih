@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Building2, Clock, Droplet, MapPin, Phone, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Building2, Clock, Droplet, MapPin, Phone } from 'lucide-react';
 import Brand from '../components/Brand';
 import EmergencyBadge from '../components/EmergencyBadge';
 import PrimaryButton from '../components/PrimaryButton';
@@ -20,7 +20,6 @@ export default function BloodAvailabilityPage() {
     bloodBankPlan,
     updateRequestDraft,
     selectBloodBankPlan,
-    confirmBloodBankPlan,
     clearBloodBankPlan,
     raiseRequest,
     goTo,
@@ -45,9 +44,6 @@ export default function BloodAvailabilityPage() {
     });
     return () => { cancelled = true; };
   }, [user?.hospital.id, requestDraft.bloodGroup]);
-
-  const securedUnits = bloodBankPlan?.status === 'secured' ? Math.min(requestDraft.units, bloodBankPlan.unitsSecured) : 0;
-  const remainingUnits = Math.max(0, requestDraft.units - securedUnits);
 
   function backToDashboard() {
     goTo('dashboard');
@@ -79,7 +75,7 @@ export default function BloodAvailabilityPage() {
               </div>
             </div>
 
-            <div className="mt-5 grid sm:grid-cols-3 gap-3">
+            <div className="mt-5 grid sm:grid-cols-2 gap-3">
               <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Blood Group
                 <select
@@ -96,21 +92,10 @@ export default function BloodAvailabilityPage() {
                   <option>{component}</option>
                 </select>
               </label>
-              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Total Units Required
-                <input
-                  type="number"
-                  min={1}
-                  max={10}
-                  value={requestDraft.units}
-                  onChange={(event) => updateRequestDraft({ units: Number(event.target.value) || 1 })}
-                  className={`mt-1 w-full ${controlClass}`}
-                />
-              </label>
             </div>
 
             <div className="mt-4 rounded-xl bg-navy-50 ring-1 ring-navy-100 p-3 text-xs text-slate-600">
-              Stock visibility does not reserve blood. Select a plan, then explicitly confirm that the hospital has secured those units for this demo emergency.
+              Decision support before raising an emergency. Check nearby stock, then manually enter only the remaining donor shortage on the emergency request.
             </div>
           </div>
 
@@ -132,29 +117,24 @@ export default function BloodAvailabilityPage() {
 
         <aside className="space-y-4">
           <div className="rounded-2xl bg-white shadow-card ring-1 ring-slate-100 p-5">
-            <div className="text-xs uppercase tracking-wider text-slate-500 font-semibold">Emergency Plan</div>
-            <div className="mt-4 space-y-3 text-sm">
-              <SummaryRow label="Total Required" value={`${requestDraft.units} units`} />
-              <SummaryRow label="Blood Bank Secured" value={`${securedUnits} units`} />
-              <SummaryRow label="Remaining Donor Requirement" value={`${remainingUnits} units`} strong />
-            </div>
+            <div className="text-xs uppercase tracking-wider text-slate-500 font-semibold">Decision Support</div>
+            <p className="mt-2 text-sm text-slate-600">Use nearby availability to decide how many individual donor units LIFE-LINK must coordinate.</p>
 
             {bloodBankPlan ? (
               <div className="mt-4 rounded-xl bg-slate-50 ring-1 ring-slate-200 p-3">
                 <div className="font-semibold text-sm text-navy-900">{bloodBankPlan.bloodBankName}</div>
                 <div className="mt-1 text-xs text-slate-500">{bloodBankPlan.unitsPlanned} units selected · {bloodBankPlan.component}</div>
                 <div className="mt-2">
-                  <EmergencyBadge tone={bloodBankPlan.status === 'secured' ? 'green' : 'amber'} dot>
-                    {bloodBankPlan.status === 'secured' ? 'Confirmed / Secured' : 'Selected / Planned'}
-                  </EmergencyBadge>
+                  <EmergencyBadge tone="amber" dot>Selected for Planning</EmergencyBadge>
                 </div>
-                {bloodBankPlan.status === 'selected' && (
-                  <div className="mt-3"><PrimaryButton block size="sm" onClick={confirmBloodBankPlan}><ShieldCheck size={15} /> Confirm Secured</PrimaryButton></div>
-                )}
               </div>
             ) : (
-              <div className="mt-4 text-xs text-slate-500">No blood-bank units selected. Donor requirement currently equals the total requirement.</div>
+              <div className="mt-4 text-xs text-slate-500">You may select an availability record as a planning note, or continue directly.</div>
             )}
+
+            <div className="mt-4 rounded-xl bg-slate-50 ring-1 ring-slate-200 p-3 text-xs text-slate-600">
+              This selection does not populate or subtract units on the emergency request.
+            </div>
 
             <div className="mt-4 space-y-2">
               <PrimaryButton block onClick={continueToRequest}>
@@ -220,7 +200,7 @@ function AvailabilityCard({
               >
                 {Array.from({ length: record.unitsAvailable }, (_, index) => index + 1).map((unit) => <option key={unit} value={unit}>{unit} unit{unit > 1 ? 's' : ''}</option>)}
               </select>
-              <SecondaryButton size="sm" onClick={onSelect}>Use for Emergency Plan</SecondaryButton>
+              <SecondaryButton size="sm" onClick={onSelect}>Use for Planning</SecondaryButton>
             </div>
           )}
         </div>
@@ -234,15 +214,6 @@ function Detail({ label, value, icon }: { label: string; value: string; icon?: R
     <div className="rounded-lg bg-slate-50 ring-1 ring-slate-100 p-2">
       <div className="text-[10px] uppercase tracking-wide text-slate-500">{label}</div>
       <div className="mt-0.5 font-semibold text-navy-900 text-xs flex items-center gap-1">{icon}{value}</div>
-    </div>
-  );
-}
-
-function SummaryRow({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
-  return (
-    <div className="flex items-center justify-between gap-3">
-      <span className="text-slate-500">{label}</span>
-      <span className={strong ? 'font-extrabold text-navy-900' : 'font-semibold text-navy-900'}>{value}</span>
     </div>
   );
 }

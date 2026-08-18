@@ -12,7 +12,7 @@ const STEPS: { label: string; sub: string; icon: typeof CheckCircle2 }[] = [
   { label: 'Red-cell compatibility checked', sub: 'Recipient ABO/Rh · compatible donor groups', icon: CheckCircle2 },
   { label: 'Donor eligibility history checked', sub: 'Last donation · medical deferrals · consent', icon: CheckCircle2 },
   { label: 'Nearby donors ranked', sub: 'Distance · reliability · availability', icon: CheckCircle2 },
-  { label: 'Blood-bank contribution accounted', sub: 'Confirmed units deducted before donor coordination', icon: CheckCircle2 },
+  { label: 'Top donor pool prepared', sub: 'Strongest compatible candidates ready for simultaneous alerting', icon: CheckCircle2 },
 ];
 
 export default function MatchingPage() {
@@ -116,8 +116,8 @@ export default function MatchingPage() {
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div>
                   <div className="text-sm text-slate-500">Matching result</div>
-                  <div className="text-2xl font-extrabold text-navy-900">{matchedDonors.length} Eligible Donors Found</div>
-                  <div className="mt-1 text-xs text-slate-500">Red-cell compatible · eligible · available · ranked by distance and reliability</div>
+                  <div className="text-2xl font-extrabold text-navy-900">{ranked.length} Compatible Donors Ready for Alerting</div>
+                  <div className="mt-1 text-xs text-slate-500">{matchedDonors.length} compatible, eligible, and available donors found · ranked by distance and reliability</div>
                 </div>
                 <PrimaryButton size="lg" onClick={onAlert}>
                   <Bell size={18} /> Alert Top 10 Donors Simultaneously
@@ -141,7 +141,7 @@ export default function MatchingPage() {
           <div className="rounded-2xl bg-white shadow-card ring-1 ring-slate-100 p-5">
             <div className="text-xs uppercase tracking-wider text-slate-500 font-semibold">Request</div>
             <div className="mt-1 text-base font-semibold text-navy-900">{activeRequest?.patientName ?? 'Aarav Mishra'}</div>
-            <div className="mt-1 text-sm text-slate-600">{activeRequest?.bloodGroup ?? 'O-'} · {activeRequest?.donorUnitsRequired ?? 0} donor units · {activeRequest?.urgency ?? 'Critical'} · {activeRequest?.requiredWithinMinutes ?? 60} min</div>
+            <div className="mt-1 text-sm text-slate-600">{activeRequest?.bloodGroup ?? 'O-'} · {activeRequest?.units ?? 0} donor units · {activeRequest?.urgency ?? 'Critical'} · {activeRequest?.requiredWithinMinutes ?? 60} min</div>
           </div>
           <div className="rounded-2xl bg-navy-900 text-white shadow-card p-5">
             <div className="text-xs uppercase tracking-wider text-white/70 font-semibold">Ranking Factors</div>

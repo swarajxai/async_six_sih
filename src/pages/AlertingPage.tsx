@@ -1,8 +1,7 @@
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Bell, CheckCircle2, Lock, ShieldCheck, Siren, Users } from 'lucide-react';
+import { ArrowRight, Bell, CheckCircle2, Lock, Siren, Users } from 'lucide-react';
 import Brand from '../components/Brand';
 import DonorCard from '../components/DonorCard';
-import EmergencyBadge from '../components/EmergencyBadge';
 import PrimaryButton from '../components/PrimaryButton';
 import { useDemo } from '../context/DemoContext';
 
@@ -10,7 +9,6 @@ export default function AlertingPage() {
   const {
     activeRequest,
     donors,
-    bloodBankPlan,
     alertedDonorIds,
     confirmedDonorIds,
     standbyDonorIds,
@@ -19,12 +17,14 @@ export default function AlertingPage() {
     finishAlerting,
   } = useDemo();
   const navigate = useNavigate();
-  const required = activeRequest?.donorUnitsRequired ?? 0;
+  const required = activeRequest?.units ?? 0;
   const secured = confirmedDonorIds.length;
   const fulfilled = required > 0 && secured >= required && !!alertProgress.lockedAt;
   const alertedDonors = alertedDonorIds
     .map((id) => donors.find((donor) => donor.id === id))
     .filter((donor): donor is NonNullable<typeof donor> => !!donor);
+  const confirmedDonors = alertedDonors.filter((donor) => confirmedDonorIds.includes(donor.id));
+  const standbyDonors = alertedDonors.filter((donor) => standbyDonorIds.includes(donor.id));
 
   function onProceed() {
     finishAlerting();
@@ -67,7 +67,7 @@ export default function AlertingPage() {
               <div className="mt-4 rounded-xl bg-emerald-50 ring-1 ring-emerald-200 p-4 text-sm text-emerald-800 flex items-start gap-2">
                 <CheckCircle2 size={17} className="mt-0.5" />
                 <div>
-                  <div className="font-semibold">{secured} distinct donors confirmed for {required} remaining units.</div>
+                  <div className="font-semibold">{secured} distinct donors confirmed for {required} donor units.</div>
                   <div className="text-xs mt-1">{standbyDonorIds.length} compatible donor{standbyDonorIds.length === 1 ? '' : 's'} retained on standby for screening replacement.</div>
                 </div>
               </div>
@@ -76,21 +76,17 @@ export default function AlertingPage() {
 
           <div className="rounded-2xl bg-white shadow-card ring-1 ring-slate-100 p-5 sm:p-6">
             <div className="flex items-center justify-between gap-3">
-              <h2 className="text-lg font-bold text-navy-900">Live Donor Coordination</h2>
+              <h2 className="text-lg font-bold text-navy-900">{fulfilled ? 'Confirmed / Active Donors' : 'Live Donor Coordination'}</h2>
               <div className="text-xs text-slate-500">Tap a card to preview the donor alert</div>
             </div>
             <div className="mt-4 grid sm:grid-cols-2 gap-3">
-              {alertedDonors.map((donor) => {
+              {(fulfilled ? confirmedDonors : alertedDonors).map((donor) => {
                 const isConfirmed = confirmedDonorIds.includes(donor.id);
-                const isStandby = standbyDonorIds.includes(donor.id);
                 return (
                   <div key={donor.id} className="relative">
-                    {(isConfirmed || isStandby) && (
-                      <div className={[
-                        'absolute -top-2 -right-2 z-10 inline-flex items-center gap-1 rounded-full text-white text-[10px] font-bold px-2 py-0.5 shadow-pop',
-                        isConfirmed ? 'bg-emerald-500' : 'bg-navy-700',
-                      ].join(' ')}>
-                        {isConfirmed ? <><Lock size={10} /> SECURED</> : <><Users size={10} /> STANDBY</>}
+                    {isConfirmed && (
+                      <div className="absolute -top-2 -right-2 z-10 inline-flex items-center gap-1 rounded-full bg-emerald-500 text-white text-[10px] font-bold px-2 py-0.5 shadow-pop">
+                        <Lock size={10} /> SECURED
                       </div>
                     )}
                     <DonorCard donor={donor} highlight={isConfirmed} onClick={() => openDonorModal(donor.id)} />
@@ -99,6 +95,25 @@ export default function AlertingPage() {
               })}
             </div>
           </div>
+
+          {fulfilled && standbyDonors.length > 0 && (
+            <div className="rounded-2xl bg-white shadow-card ring-1 ring-slate-100 p-5 sm:p-6">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-lg font-bold text-navy-900">Standby Donors</h2>
+                <div className="text-xs text-slate-500">Highest-ranked replacement pool</div>
+              </div>
+              <div className="mt-4 grid sm:grid-cols-2 gap-3">
+                {standbyDonors.map((donor) => (
+                  <div key={donor.id} className="relative">
+                    <div className="absolute -top-2 -right-2 z-10 inline-flex items-center gap-1 rounded-full bg-navy-700 text-white text-[10px] font-bold px-2 py-0.5 shadow-pop">
+                      <Users size={10} /> STANDBY
+                    </div>
+                    <DonorCard donor={donor} onClick={() => openDonorModal(donor.id)} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {fulfilled && (
             <div className="flex justify-end">
@@ -125,13 +140,9 @@ export default function AlertingPage() {
           </div>
 
           <div className="rounded-2xl bg-white shadow-card ring-1 ring-slate-100 p-5">
-            <div className="flex items-center gap-2">
-              <div className="grid place-items-center h-9 w-9 rounded-lg bg-emerald-50 text-emerald-700"><ShieldCheck size={18} /></div>
-              <div className="text-xs uppercase tracking-wider text-slate-500 font-semibold">Blood-Bank Contribution</div>
-            </div>
-            <div className="mt-3 text-2xl font-extrabold text-navy-900">{activeRequest?.bloodBankUnitsSecured ?? 0} units</div>
-            <div className="mt-1 text-xs text-slate-500">{bloodBankPlan?.bloodBankName ?? 'No blood-bank units secured'}</div>
-            {bloodBankPlan?.status === 'secured' && <div className="mt-2"><EmergencyBadge tone="green" dot>Confirmed / Secured</EmergencyBadge></div>}
+            <div className="text-xs uppercase tracking-wider text-slate-500 font-semibold">Donor Pool Status</div>
+            <div className="mt-3 text-2xl font-extrabold text-navy-900">{secured} active · {standbyDonorIds.length} standby</div>
+            <div className="mt-1 text-xs text-slate-500">All standby donors remain available for automatic replacement.</div>
           </div>
         </aside>
       </main>

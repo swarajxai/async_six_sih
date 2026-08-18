@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, ArrowRight, CheckCircle2, Heart, Hourglass, Phone, Sparkles, Stethoscope, Users } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Car, CheckCircle2, Clock, Heart, Hourglass, MapPin, Phone, Stethoscope, Users } from 'lucide-react';
 import Brand from '../components/Brand';
 import CoordinationDonorCard from '../components/CoordinationDonorCard';
 import DonorCard from '../components/DonorCard';
@@ -10,7 +10,7 @@ import PrimaryButton from '../components/PrimaryButton';
 import SecondaryButton from '../components/SecondaryButton';
 import Timeline from '../components/Timeline';
 import { useDemo } from '../context/DemoContext';
-import type { TimelineEntry } from '../types';
+import type { DonorTravelStatus, TimelineEntry } from '../types';
 
 export default function CoordinationPage() {
   const {
@@ -20,17 +20,19 @@ export default function CoordinationPage() {
     standbyDonorIds,
     failedDonorIds,
     donorCoordination,
+    trackedDonorId,
     replacementCount,
     replacementPending,
     coordinationElapsedMs,
     tickDonorEtas,
     tickCoordination,
+    selectDonorForTracking,
     simulateScreeningFailure,
     completeDonation,
     openDonorModal,
   } = useDemo();
   const navigate = useNavigate();
-  const required = activeRequest?.donorUnitsRequired ?? 0;
+  const required = activeRequest?.units ?? 0;
   const activeDonors = confirmedDonorIds
     .map((id) => donors.find((donor) => donor.id === id))
     .filter((donor): donor is NonNullable<typeof donor> => !!donor);
@@ -40,11 +42,13 @@ export default function CoordinationPage() {
   const standbyDonors = standbyDonorIds
     .map((id) => donors.find((donor) => donor.id === id))
     .filter((donor): donor is NonNullable<typeof donor> => !!donor);
-  const mapDonor = activeDonors[0];
-  const mapCoordination = mapDonor ? donorCoordination[mapDonor.id] : null;
-  const mapProgress = mapDonor && mapCoordination
-    ? Math.max(0, Math.min(1, 1 - mapCoordination.etaSeconds / (mapDonor.etaMinutes * 60)))
+  const trackedDonor = donors.find((donor) => donor.id === trackedDonorId) ?? activeDonors[0];
+  const trackedCoordination = trackedDonor ? donorCoordination[trackedDonor.id] : null;
+  const replacementDonor = activeDonors.find((donor) => donorCoordination[donor.id]?.isReplacement);
+  const mapProgress = trackedDonor && trackedCoordination
+    ? Math.max(0, Math.min(1, 1 - trackedCoordination.etaSeconds / (trackedDonor.etaMinutes * 60)))
     : 0;
+  const lastFailedDonor = failedDonors[failedDonors.length - 1];
 
   useEffect(() => {
     const id = setInterval(tickDonorEtas, 1000);
@@ -55,6 +59,10 @@ export default function CoordinationPage() {
     const id = setInterval(tickCoordination, 1000);
     return () => clearInterval(id);
   }, [tickCoordination]);
+
+  useEffect(() => {
+    if (!trackedDonorId && activeDonors[0]) selectDonorForTracking(activeDonors[0].id);
+  }, [trackedDonorId, activeDonors, selectDonorForTracking]);
 
   const entries: TimelineEntry[] = useMemo(() => [
     { stage: 'request-raised', label: 'Request raised by hospital', done: true, active: false },
@@ -85,13 +93,13 @@ export default function CoordinationPage() {
             {replacementPending && (
               <div className="rounded-xl bg-amber-50 ring-1 ring-amber-200 p-3 mb-4 text-amber-900 text-sm flex items-start gap-2">
                 <AlertTriangle size={16} className="mt-0.5" />
-                <div><div className="font-semibold">Screening failed for one secured donor.</div><div className="text-xs">Activating highest-ranked standby donor…</div></div>
+                <div><div className="font-semibold">{lastFailedDonor?.name ?? 'Selected donor'} failed screening.</div><div className="text-xs">Activating highest-ranked standby donor…</div></div>
               </div>
             )}
             {replacementCount > 0 && !replacementPending && (
               <div className="rounded-xl bg-emerald-50 ring-1 ring-emerald-200 p-3 mb-4 text-emerald-900 text-sm flex items-start gap-2">
                 <CheckCircle2 size={16} className="mt-0.5" />
-                <div><div className="font-semibold">Standby replacement activated automatically.</div><div className="text-xs">Required donor capacity restored to {confirmedDonorIds.length} / {required}.</div></div>
+                <div><div className="font-semibold">{replacementDonor?.name ?? 'Standby donor'} activated as the confirmed replacement.</div><div className="text-xs">Required donor capacity restored to {confirmedDonorIds.length} / {required}.</div></div>
               </div>
             )}
 
@@ -106,14 +114,36 @@ export default function CoordinationPage() {
 
             <div className="mt-4 grid sm:grid-cols-2 gap-3">
               {activeDonors.map((donor) => donorCoordination[donor.id] && (
-                <CoordinationDonorCard key={donor.id} donor={donor} coordination={donorCoordination[donor.id]} />
+                <CoordinationDonorCard
+                  key={donor.id}
+                  donor={donor}
+                  coordination={donorCoordination[donor.id]}
+                  selected={trackedDonor?.id === donor.id}
+                  onClick={() => selectDonorForTracking(donor.id)}
+                />
               ))}
             </div>
 
-            {mapDonor && (
-              <div className="mt-5">
-                <div className="mb-2 text-xs text-slate-500">Active route preview · {mapDonor.name}</div>
+            {trackedDonor && trackedCoordination && (
+              <div className="mt-5 rounded-2xl bg-slate-50 ring-1 ring-slate-200 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-xs uppercase tracking-wider text-slate-500 font-semibold">Individual Donor Tracking</div>
+                    <h2 className="mt-0.5 text-lg font-bold text-navy-900">Tracking {trackedDonor.name}</h2>
+                  </div>
+                  <EmergencyBadge tone={trackedCoordination.status === 'screening-failed' ? 'red' : trackedCoordination.status === 'screening' ? 'amber' : 'green'} dot>
+                    {coordinationStatusLabel(trackedCoordination.status, trackedCoordination.isReplacement)}
+                  </EmergencyBadge>
+                </div>
+                <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <TrackingDetail icon={<MapPin size={12} />} label="Distance" value={`${trackedDonor.distanceKm} km`} />
+                  <TrackingDetail icon={<Clock size={12} />} label="Current ETA" value={formatEta(trackedCoordination.etaSeconds)} />
+                  <TrackingDetail icon={<Car size={12} />} label="Travel Mode" value={trackedCoordination.travelMode} />
+                  <TrackingDetail icon={<Stethoscope size={12} />} label="Current Status" value={coordinationStatusLabel(trackedCoordination.status, trackedCoordination.isReplacement)} />
+                </div>
+                <div className="mt-4">
                 <MapPlaceholder progress={mapProgress} />
+                </div>
               </div>
             )}
           </div>
@@ -123,9 +153,10 @@ export default function CoordinationPage() {
             <div className="mt-4 grid sm:grid-cols-2 gap-6">
               <Timeline entries={entries} />
               <div className="space-y-3">
-                <SecondaryButton block onClick={() => openDonorModal(confirmedDonorIds[0] ?? 'd-1')}><Phone size={16} /> View Donor Alert</SecondaryButton>
-                <SecondaryButton block disabled={replacementPending || standbyDonorIds.length === 0 || failedDonorIds.length > 0} onClick={simulateScreeningFailure}>
-                  <AlertTriangle size={16} /> {failedDonorIds.length ? 'Screening Failure Simulated' : 'Simulate Screening Failure'}
+                <div className="text-xs text-slate-500">Selected donor: <span className="font-semibold text-navy-900">{trackedDonor?.name ?? 'None'}</span></div>
+                <SecondaryButton block onClick={() => openDonorModal(trackedDonor?.id ?? 'd-1')}><Phone size={16} /> View Selected Donor Alert</SecondaryButton>
+                <SecondaryButton block disabled={replacementPending || standbyDonorIds.length === 0 || !trackedDonorId || !confirmedDonorIds.includes(trackedDonorId)} onClick={simulateScreeningFailure}>
+                  <AlertTriangle size={16} /> Simulate Screening Failure
                 </SecondaryButton>
                 <PrimaryButton block size="lg" disabled={replacementPending || confirmedDonorIds.length < required} onClick={onContinue}>
                   <CheckCircle2 size={18} /> Continue Successful Donation <ArrowRight size={16} />
@@ -148,14 +179,14 @@ export default function CoordinationPage() {
           <div className="rounded-2xl bg-white shadow-card ring-1 ring-slate-100 p-5">
             <div className="text-xs uppercase tracking-wider text-slate-500 font-semibold">Patient</div>
             <div className="mt-1 text-lg font-extrabold text-navy-900">{activeRequest?.patientName ?? 'Aarav Mishra'}</div>
-            <div className="mt-1 text-sm text-slate-600">{activeRequest?.bloodGroup} · {activeRequest?.units} total units · {activeRequest?.urgency}</div>
+            <div className="mt-1 text-sm text-slate-600">{activeRequest?.bloodGroup} · {activeRequest?.units} donor units · {activeRequest?.urgency}</div>
           </div>
 
           <div className="rounded-2xl bg-navy-900 text-white shadow-card p-5">
-            <div className="text-xs uppercase tracking-wider text-white/70 font-semibold">Source Coordination</div>
+            <div className="text-xs uppercase tracking-wider text-white/70 font-semibold">Donor Coordination</div>
             <ul className="mt-3 space-y-2 text-sm text-white/90">
-              <li className="flex items-center gap-2"><Sparkles size={14} className="text-amber-300" /> {activeRequest?.bloodBankUnitsSecured ?? 0} blood-bank units secured</li>
               <li className="flex items-center gap-2"><Stethoscope size={14} className="text-emerald-300" /> {required} donor units required</li>
+              <li className="flex items-center gap-2"><Users size={14} className="text-amber-300" /> {confirmedDonorIds.length} active donors tracked</li>
               <li className="flex items-center gap-2"><Heart size={14} className="text-red-300" /> {standbyDonorIds.length} donor{standbyDonorIds.length === 1 ? '' : 's'} on standby</li>
             </ul>
           </div>
@@ -173,6 +204,27 @@ export default function CoordinationPage() {
           </div>
         </aside>
       </main>
+    </div>
+  );
+}
+
+function coordinationStatusLabel(status: DonorTravelStatus, isReplacement: boolean): string {
+  if (status === 'screening-failed') return 'Screening Failed';
+  if (status === 'screening') return 'Screening';
+  if (status === 'ready') return 'Ready to Donate';
+  if (status === 'donated') return 'Donation Completed';
+  return isReplacement ? 'Confirmed Replacement' : 'En Route';
+}
+
+function formatEta(seconds: number): string {
+  return `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, '0')}s`;
+}
+
+function TrackingDetail({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return (
+    <div className="rounded-lg bg-white ring-1 ring-slate-200 p-2">
+      <div className="text-[10px] uppercase tracking-wide text-slate-500 flex items-center gap-1">{icon}{label}</div>
+      <div className="mt-0.5 text-xs font-semibold text-navy-900">{value}</div>
     </div>
   );
 }

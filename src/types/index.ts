@@ -35,8 +35,6 @@ export interface EmergencyRequest {
   location: string;
   urgency: Urgency;
   requiredWithinMinutes: number;
-  bloodBankUnitsSecured: number;
-  donorUnitsRequired: number;
   raisedAt: number; // epoch ms
   status: 'raised' | 'matching' | 'alerting' | 'secured' | 'coordination' | 'success';
 }
@@ -93,8 +91,7 @@ export interface BloodBankPlan {
   bloodGroup: BloodGroup;
   component: BloodComponent;
   unitsPlanned: number;
-  unitsSecured: number;
-  status: 'selected' | 'secured';
+  status: 'selected';
 }
 
 export type DonorTravelStatus =

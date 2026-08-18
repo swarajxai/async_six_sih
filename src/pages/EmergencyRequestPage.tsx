@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, ArrowRight, Building2, CheckCircle2, MapPin, Shield } from 'lucide-react';
+import { AlertCircle, ArrowRight, Building2, MapPin, Shield } from 'lucide-react';
 import Brand from '../components/Brand';
 import EmergencyBadge from '../components/EmergencyBadge';
 import PrimaryButton from '../components/PrimaryButton';
@@ -14,23 +14,12 @@ export default function EmergencyRequestPage() {
   const {
     user,
     requestDraft,
-    bloodBankPlan,
-    activeRequest,
     updateRequestDraft,
     startMatching,
-    completeBloodBankCoverage,
   } = useDemo();
   const navigate = useNavigate();
-  const securedUnits = activeRequest?.bloodBankUnitsSecured
-    ?? (bloodBankPlan?.status === 'secured' ? Math.min(requestDraft.units, bloodBankPlan.unitsSecured) : 0);
-  const remainingDonorUnits = Math.max(0, requestDraft.units - securedUnits);
 
   function onStart() {
-    if (remainingDonorUnits === 0) {
-      completeBloodBankCoverage();
-      navigate('/success');
-      return;
-    }
     startMatching();
     navigate('/matching');
   }
@@ -58,7 +47,7 @@ export default function EmergencyRequestPage() {
             <div className="mt-5 grid sm:grid-cols-2 gap-4">
               <TextField label="Patient Name" value={requestDraft.patientName} onChange={(value) => updateRequestDraft({ patientName: value })} />
               <SelectField label="Patient Blood Group" value={requestDraft.bloodGroup} options={BLOOD_GROUPS} onChange={(value) => updateRequestDraft({ bloodGroup: value as BloodGroup })} accent />
-              <NumberField label="Total Units Required" value={requestDraft.units} onChange={(value) => updateRequestDraft({ units: value })} />
+              <NumberField label="Donor Units Required" value={requestDraft.units} onChange={(value) => updateRequestDraft({ units: value })} />
               <SelectField label="Urgency" value={requestDraft.urgency} options={URGENCIES} onChange={(value) => updateRequestDraft({ urgency: value as Urgency })} accentRed />
               <NumberField label="Required Within (minutes)" value={requestDraft.requiredWithinMinutes} onChange={(value) => updateRequestDraft({ requiredWithinMinutes: value })} />
               <ReadOnlyField label="Hospital" value={user?.hospital.name ?? 'VSS Medical College & Hospital'} icon={<Building2 size={14} className="text-slate-400" />} />
@@ -66,34 +55,6 @@ export default function EmergencyRequestPage() {
                 <ReadOnlyField label="Location" value={user?.hospital.location ?? 'Burla, Sambalpur'} icon={<MapPin size={14} className="text-slate-400" />} />
               </div>
             </div>
-
-            <div className="mt-5 grid sm:grid-cols-3 gap-3">
-              <Breakdown label="Total Required" value={`${requestDraft.units} units`} />
-              <Breakdown label="Blood Bank Secured" value={`${securedUnits} units`} tone="green" />
-              <Breakdown label="Remaining Donor Requirement" value={`${remainingDonorUnits} units`} tone={remainingDonorUnits === 0 ? 'green' : 'red'} />
-            </div>
-
-            {bloodBankPlan && (
-              <div className="mt-4 rounded-xl bg-slate-50 ring-1 ring-slate-200 p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                <div>
-                  <div className="text-sm font-semibold text-navy-900">{bloodBankPlan.bloodBankName}</div>
-                  <div className="text-xs text-slate-500">{bloodBankPlan.unitsPlanned} {bloodBankPlan.component} units in emergency plan</div>
-                </div>
-                <EmergencyBadge tone={bloodBankPlan.status === 'secured' ? 'green' : 'amber'} dot>
-                  {bloodBankPlan.status === 'secured' ? 'Confirmed / Secured' : 'Selected / Not Secured'}
-                </EmergencyBadge>
-              </div>
-            )}
-
-            {remainingDonorUnits === 0 && (
-              <div className="mt-4 rounded-xl bg-emerald-50 ring-1 ring-emerald-200 p-4 flex items-start gap-3 text-emerald-900">
-                <CheckCircle2 size={18} className="mt-0.5" />
-                <div>
-                  <div className="text-sm font-semibold">Blood requirement covered through confirmed blood-bank stock.</div>
-                  <div className="text-xs mt-0.5">No donor matching or donor alerts are required.</div>
-                </div>
-              </div>
-            )}
 
             <div className="mt-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-xl bg-navy-50 ring-1 ring-navy-100 p-3 sm:p-4">
               <div className="flex items-start gap-3">
@@ -108,7 +69,7 @@ export default function EmergencyRequestPage() {
 
             <div className="mt-6 flex justify-end">
               <PrimaryButton size="lg" onClick={onStart}>
-                {remainingDonorUnits === 0 ? 'Complete Blood-Bank Coordination' : 'Start Emergency Matching'}
+                Start Emergency Matching
                 <ArrowRight size={18} />
               </PrimaryButton>
             </div>
@@ -128,7 +89,7 @@ export default function EmergencyRequestPage() {
           <div className="rounded-2xl bg-navy-900 text-white shadow-card p-5">
             <div className="text-xs uppercase tracking-wider text-white/70 font-semibold">Coordination Rule</div>
             <div className="mt-1 text-base font-semibold">One donor contributes one demo unit</div>
-            <p className="mt-3 text-sm text-white/85">LIFE-LINK will secure {remainingDonorUnits} distinct donor{remainingDonorUnits === 1 ? '' : 's'} for the remaining {remainingDonorUnits} unit{remainingDonorUnits === 1 ? '' : 's'}.</p>
+            <p className="mt-3 text-sm text-white/85">LIFE-LINK will secure {requestDraft.units} distinct donor{requestDraft.units === 1 ? '' : 's'} for the {requestDraft.units} donor unit{requestDraft.units === 1 ? '' : 's'} entered above.</p>
           </div>
         </aside>
       </main>
@@ -141,7 +102,7 @@ function TextField({ label, value, onChange }: { label: string; value: string; o
 }
 
 function NumberField({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
-  return <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}<input type="number" min={1} value={value} onChange={(event) => onChange(Number(event.target.value) || 1)} className={controlClass} /></label>;
+  return <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}<input type="number" min={1} max={10} value={value} onChange={(event) => onChange(Number(event.target.value) || 1)} className={controlClass} /></label>;
 }
 
 function SelectField({ label, value, options, onChange, accent, accentRed }: { label: string; value: string; options: string[]; onChange: (value: string) => void; accent?: boolean; accentRed?: boolean }) {
@@ -150,9 +111,4 @@ function SelectField({ label, value, options, onChange, accent, accentRed }: { l
 
 function ReadOnlyField({ label, value, icon }: { label: string; value: string; icon?: React.ReactNode }) {
   return <div><div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</div><div className={`${controlClass} flex items-center gap-2`}>{icon}{value}</div></div>;
-}
-
-function Breakdown({ label, value, tone = 'navy' }: { label: string; value: string; tone?: 'navy' | 'green' | 'red' }) {
-  const colors = tone === 'green' ? 'bg-emerald-50 text-emerald-800 ring-emerald-200' : tone === 'red' ? 'bg-red-50 text-red-700 ring-red-200' : 'bg-navy-50 text-navy-900 ring-navy-100';
-  return <div className={`rounded-xl ring-1 p-3 ${colors}`}><div className="text-[11px] uppercase tracking-wide opacity-70 font-semibold">{label}</div><div className="mt-1 text-xl font-extrabold">{value}</div></div>;
 }
